@@ -13,40 +13,6 @@
 <body>
   <div id="app">
 
-    <!-- ================= SETUP WINDOW (first run) ================= -->
-    <div id="setupWindow" class="setup-window hidden">
-      <div class="setup-card">
-        <div class="setup-logo">
-          <svg viewBox="0 0 24 24" class="shine-spark"><path d="M12 2c.6 4.6 5.4 9.4 10 10-4.6.6-9.4 5.4-10 10-.6-4.6-5.4-9.4-10-10 4.6-.6 9.4-5.4 10-10Z"/></svg>
-        </div>
-        <h1 class="setup-title">Install Shine Browser</h1>
-        <p class="setup-sub">A powerful Safari-styled browser with Shine AI built in.</p>
-
-        <div class="setup-choices">
-          <label class="setup-choice">
-            <input type="checkbox" id="setupDesktop" checked />
-            <span>Create a <strong>Desktop shortcut</strong></span>
-          </label>
-          <label class="setup-choice">
-            <input type="checkbox" id="setupStart" checked />
-            <span>Add a <strong>Start menu</strong> shortcut</span>
-          </label>
-          <label class="setup-choice">
-            <input type="checkbox" id="setupTaskbar" checked />
-            <span><strong>Pin to taskbar</strong></span>
-          </label>
-        </div>
-
-        <div class="setup-steps" id="setupSteps"></div>
-
-        <div class="setup-actions">
-          <button class="btn-ghost" id="setupSkip">Skip</button>
-          <button class="btn-primary" id="setupInstall">Install Shine Browser</button>
-        </div>
-        <p class="setup-note" id="setupNote">Installs to %LOCALAPPDATA%\Shine Browser — no admin rights required.</p>
-      </div>
-    </div>
-
     <!-- ================= TITLE BAR ================= -->
     <div id="titleBar">
       <div class="brand" id="brandBtn" title="Shine Browser">
@@ -336,8 +302,7 @@
         <div class="settings-group">
           <h3>About</h3>
           <div class="about" id="aboutBox">Loading…</div>
-          <button class="btn-ghost sm" id="reRunSetup">Re-run installer / shortcuts</button>
-        </div>
+          <button class="btn-ghost sm" id="reRunSetup">Re-run installer / shortcuts</button>        </div>
       </div>
     </div>
 
@@ -364,7 +329,6 @@
   <script src="js/menu.js"></script>
   <script src="js/selection.js"></script>
   <script src="js/shine.js"></script>
-  <script src="js/setup.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

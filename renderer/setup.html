@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Install Shine Browser</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    html, body { overflow: hidden; }
+    body { display: flex; align-items: center; justify-content: center; height: 100vh; }
+    .setup-shell { width: min(500px, 92vw); }
+
+    .setup-mark { display: flex; justify-content: center; margin-bottom: 22px; }
+    .setup-mark svg { width: 150px; height: auto; }
+
+    .setup-title { font-size: 23px; font-weight: 300; text-align: center; letter-spacing: -.02em; }
+    .setup-sub { text-align: center; color: var(--ink-50); font-size: 13px; margin: 8px 0 26px; line-height: 1.6; }
+
+    .setup-opts {
+      border: 1px solid var(--line-soft); border-radius: 14px;
+      padding: 6px 16px; background: var(--glass); margin-bottom: 20px;
+    }
+    .opt {
+      display: flex; align-items: center; gap: 12px;
+      padding: 13px 2px; font-size: 13.5px; color: var(--ink-70);
+      cursor: pointer; border-bottom: 1px solid var(--line-soft);
+    }
+    .opt:last-child { border-bottom: none; }
+    .opt input { accent-color: #fff; width: 16px; height: 16px; cursor: pointer; flex: none; }
+    .opt span small { display: block; color: var(--ink-35); font-size: 11.5px; margin-top: 3px; }
+
+    .setup-dest {
+      font-size: 11.5px; color: var(--ink-35); text-align: center;
+      margin-bottom: 22px; word-break: break-all; line-height: 1.6;
+    }
+
+    .steps { display: none; flex-direction: column; gap: 9px; margin-bottom: 20px; }
+    .steps.on { display: flex; }
+    .step {
+      display: flex; align-items: center; gap: 11px;
+      font-size: 13px; color: var(--ink-50);
+      padding: 11px 15px; border: 1px solid var(--line-soft);
+      border-radius: 11px; background: var(--glass);
+    }
+    .step.active { color: var(--ink-70); }
+    .step.done { color: var(--ink-70); }
+    .step .dot {
+      width: 15px; height: 15px; border-radius: 50%; flex: none;
+      border: 1.5px solid var(--ink-20); position: relative;
+    }
+    .step.active .dot { border-top-color: var(--ink); animation: spin .7s linear infinite; }
+    .step.done .dot { border-color: var(--ink); background: var(--ink); }
+    .step.done .dot::after {
+      content: ""; position: absolute; left: 4px; top: 1px;
+      width: 4px; height: 8px; border: solid #000;
+      border-width: 0 1.5px 1.5px 0; transform: rotate(45deg);
+    }
+    .step .detail { font-size: 11px; color: var(--ink-35); margin-left: auto; }
+
+    .setup-actions { display: flex; gap: 12px; justify-content: center; }
+    .setup-msg { text-align: center; font-size: 11.5px; color: var(--ink-35); margin-top: 16px; min-height: 16px; line-height: 1.6; }
+    .setup-msg.err { color: var(--ink-70); }
+  </style>
+</head>
+<body>
+  <div class="setup-shell">
+    <div class="setup-mark">
+      <svg viewBox="0 0 240 120">
+        <text x="120" y="66" text-anchor="middle" fill="#fff"
+              font-family="Inter,-apple-system,'Segoe UI',Roboto,sans-serif"
+              font-size="54" font-weight="300" letter-spacing="-1">Shine</text>
+        <text x="182" y="98" text-anchor="middle" fill="#fff"
+              font-family="Inter,-apple-system,'Segoe UI',Roboto,sans-serif"
+              font-size="21" font-weight="300">Browser</text>
+      </svg>
+    </div>
+
+    <h1 class="setup-title">Install Shine Browser</h1>
+    <p class="setup-sub">Choose what you'd like, then press Install.</p>
+
+    <div class="setup-opts" id="opts">
+      <label class="opt">
+        <input type="checkbox" id="optDesktop" checked />
+        <span>Create a <strong>Desktop shortcut</strong></span>
+      </label>
+      <label class="opt">
+        <input type="checkbox" id="optStart" checked />
+        <span>Add a <strong>Start menu</strong> shortcut</span>
+      </label>
+      <label class="opt">
+        <input type="checkbox" id="optTaskbar" checked />
+        <span><strong>Pin to taskbar</strong></span>
+      </label>
+    </div>
+
+    <div class="steps" id="steps"></div>
+
+    <p class="setup-dest" id="dest">Installs to %LOCALAPPDATA%\Shine Browser</p>
+
+    <div class="setup-actions">
+      <button class="btn-ghost" id="btnSkip">Skip</button>
+      <button class="btn-primary" id="btnInstall">Install</button>
+    </div>
+    <p class="setup-msg" id="msg"></p>
+  </div>
+
+  <script>
+    const stepsEl = document.getElementById('steps');
+    const msgEl = document.getElementById('msg');
+    const btnInstall = document.getElementById('btnInstall');
+    const btnSkip = document.getElementById('btnSkip');
+    const optsEl = document.getElementById('opts');
+
+    const STEP_LABELS = {
+      files: 'Copy application files',
+      desktop: 'Desktop shortcut',
+      start: 'Start menu shortcut',
+      taskbar: 'Pin to taskbar',
+    };
+
+    function renderSteps(order, doneSet, activeKey) {
+      stepsEl.classList.add('on');
+      stepsEl.innerHTML = order.map((k) => {
+        const done = doneSet.has(k);
+        const active = k === activeKey && !done;
+        return `<div class="step ${done ? 'done' : ''} ${active ? 'active' : ''}">
+          <span class="dot"></span><span>${STEP_LABELS[k]}</span>
+        </div>`;
+      }).join('');
+    }
+
+    async function start() {
+      const desktop = document.getElementById('optDesktop').checked;
+      const start = document.getElementById('optStart').checked;
+      const taskbar = document.getElementById('optTaskbar').checked;
+
+      btnInstall.disabled = true;
+      btnSkip.disabled = true;
+      btnInstall.textContent = 'Installing…';
+      optsEl.style.opacity = '.4';
+      optsEl.style.pointerEvents = 'none';
+
+      const order = ['files', 'desktop', 'start', 'taskbar'];
+      const done = new Set();
+      renderSteps(order, done, 'files');
+
+      let result;
+      try {
+        result = await window.shineSetup.run({ desktop, startMenu: start, pinTaskbar: taskbar });
+      } catch (e) {
+        result = { ok: false, error: String(e.message || e), steps: [], info: {} };
+      }
+
+      // animate through each produced step
+      const produced = (result.steps || []).map((s) => s.key);
+      const runOrder = order.filter((k) => produced.includes(k));
+      for (const key of runOrder) {
+        await new Promise((r) => setTimeout(r, 420));
+        done.add(key);
+        const next = runOrder[runOrder.length - 1] === key ? null : runOrder[runOrder.length === runOrder.indexOf(key) + 1 ? runOrder.length - 1 : runOrder.indexOf(key) + 1];
+        renderSteps(order, done, next);
+      }
+      await new Promise((r) => setTimeout(r, 300));
+      order.forEach((k) => done.add(k));
+      renderSteps(order, done, null);
+
+      const info = result.info || {};
+      if (result.ok) {
+        msgEl.className = 'setup-msg';
+        msgEl.textContent = 'Installed. Press Launch to open Shine Browser.';
+        btnInstall.textContent = 'Launch Shine Browser';
+        btnInstall.disabled = false;
+        btnInstall.onclick = () => window.shineSetup.finish();
+        btnSkip.textContent = 'Close';
+      } else {
+        msgEl.className = 'setup-msg err';
+        msgEl.textContent = result.error || 'Install did not complete. You can run scripts\\install.ps1 instead.';
+        btnInstall.textContent = 'Try again';
+        btnInstall.disabled = false;
+        btnInstall.onclick = start;
+        optsEl.style.opacity = '';
+        optsEl.style.pointerEvents = '';
+      }
+    }
+
+    btnInstall.addEventListener('click', start);
+    btnSkip.addEventListener('click', () => {
+      window.shineSetup.finish();
+    });
+
+    // show the destination + whether a packaged build is available
+    window.shineSetup.status().then((st) => {
+      if (st && st.installDir) document.getElementById('dest').textContent = 'Installs to ' + st.installDir;
+      if (st && st.hasBuild === false) {
+        msgEl.className = 'setup-msg err';
+        msgEl.textContent = 'No packaged build found. Run "npm run pack" first, or Skip to use the source build.';
+      }
+    }).catch(() => {});
+  </script>
+</body>
+</html>

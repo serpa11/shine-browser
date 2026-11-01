@@ -10,8 +10,11 @@ const store = require('./store');
 
 const EXT_DIR = () => path.join(app.getPath('userData'), 'extensions');
 let mainSession = null;
+const initedSessions = new Set();
 
 function init(s) {
+  if (!s || initedSessions.has(s)) return;
+  initedSessions.add(s);
   mainSession = s;
   fs.mkdirSync(EXT_DIR(), { recursive: true });
 

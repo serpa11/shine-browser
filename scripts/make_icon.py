@@ -1,53 +1,73 @@
-"""Generate the Shine Browser icon (black tile + glowing 4-point Shine sparkle)."""
-import math
+"""Shine Browser icon — pure monochrome, matching the supplied artwork:
+black square, 'Shine' large + 'Browser' small, white, no color at all."""
 import os
 
-try:
-    from PIL import Image, ImageDraw, ImageFilter
-except ImportError:
-    print("Pillow is missing. Run: pip install pillow")
-    raise SystemExit(1)
+from PIL import Image, ImageDraw, ImageFont
 
 BUILD = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "build")
 os.makedirs(BUILD, exist_ok=True)
 
-
-def sparkle_points(cx, cy, r, power=2.6, steps=240):
-    pts = []
-    for i in range(steps):
-        t = (2 * math.pi * i) / steps
-        x = r * (math.cos(t) ** 3)
-        y = r * (math.sin(t) ** 3)
-        d = math.hypot(x, y)
-        if d > r:
-            x, y = x * r / d, y * r / d
-        pts.append((cx + x, cy + y))
-    return pts
+# Try a thin humanist sans that matches the reference art.
+FONT_CANDIDATES = [
+    r"C:\Windows\Fonts\segoeuil.ttf",    # Segoe UI Light
+    r"C:\Windows\Fonts\segoeui.ttf",     # Segoe UI
+    r"C:\Windows\Fonts\arial.ttf",
+    r"C:\Windows\Fonts\tahomabd.ttf",
+]
 
 
-def make(size):
-    ss = 4
+def load_font(size):
+    for p in FONT_CANDIDATES:
+        if os.path.exists(p):
+            try:
+                return ImageFont.truetype(p, size)
+            except Exception:
+                continue
+    return ImageFont.load_default()
+
+
+def fit_font(text, box_w, start, weight=1):
+    """Shrink until the text fits inside box_w."""
+    size = start
+    while size > 8:
+        f = load_font(size)
+        d = ImageDraw.Draw(Image.new("L", (10, 10)))
+        w = d.textbbox((0, 0), text, font=f)[2]
+        if w <= box_w:
+            return f, w
+        size -= 2
+    return load_font(8), 0
+
+
+def make(size, ss=4):
     S = size * ss
-    tile = Image.new("RGBA", (S, S), (0, 0, 0, 0))
-    d = ImageDraw.Draw(tile)
-    rad = int(S * 0.235)
-    d.rounded_rectangle([0, 0, S - 1, S - 1], radius=rad, fill=(5, 5, 6, 255))
+    img = Image.new("RGBA", (S, S), (0, 0, 0, 255))          # pure black tile
+    d = ImageDraw.Draw(img)
 
-    pad = int(S * 0.03)
-    inner = Image.new("RGBA", (S, S), (0, 0, 0, 0))
-    di = ImageDraw.Draw(inner)
-    cx = cy = S / 2
-    r = S / 2 - pad
-    di.polygon(sparkle_points(cx, cy, r), fill=(255, 255, 255, 255))
-    # second, smaller sparkle for the classic dual-star look
-    di.polygon(sparkle_points(cx, cy, r * 0.42), fill=(255, 255, 255, 255))
+    # 'Shine' — large, light weight, centred slightly above middle
+    shine = "Shine"
+    f1, _ = fit_font(shine, S * 0.80, int(S * 0.30))
+    b1 = d.textbbox((0, 0), shine, font=f1)
+    w1, h1 = b1[2] - b1[0], b1[3] - b1[1]
+    x1 = (S - w1) / 2 - b1[0]
+    y1 = S * 0.40 - h1 / 2 - b1[1]
+    d.text((x1, y1), shine, font=f1, fill=(255, 255, 255, 255))
 
-    glow = inner.filter(ImageFilter.GaussianBlur(S * 0.035))
-    tile = Image.alpha_composite(tile, glow)
-    tile = Image.alpha_composite(tile, inner)
-    return tile.resize((size, size), Image.LANCZOS)
+    # 'Browser' — small, tucked under the right half of 'Shine'
+    word = "Browser"
+    f2, _ = fit_font(word, S * 0.46, int(S * 0.115))
+    b2 = d.textbbox((0, 0), word, font=f2)
+    w2, h2 = b2[2] - b2[0], b2[3] - b2[1]
+    x2 = x1 + w1 - w2                       # right-aligned to 'Shine'
+    y2 = y1 + h1 + S * 0.045
+    d.text((x2, y2), word, font=f2, fill=(255, 255, 255, 255))
+
+    return img.resize((size, size), Image.LANCZOS)
 
 
 make(1024).save(os.path.join(BUILD, "icon.png"))
-make(256).save(os.path.join(BUILD, "icon.ico"), sizes=[(256, 256), (128, 128), (64, 64), (48, 48), (32, 32), (16, 16)])
-print("icons written ->", BUILD)
+make(256).save(
+    os.path.join(BUILD, "icon.ico"),
+    sizes=[(256, 256), (128, 128), (64, 64), (48, 48), (32, 32), (16, 16)],
+)
+print("monochrome Shine Browser icons written ->", BUILD)

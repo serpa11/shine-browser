@@ -30,6 +30,8 @@
     },
     "files": [
       "app/**/*",
+      "renderer/**/*",
+      "build/**/*",
       "package.json"
     ],
     "compression": "normal",
@@ -52,15 +54,18 @@
       "requestedExecutionLevel": "asInvoker"
     },
     "nsis": {
-      "oneClick": true,
+      "oneClick": false,
       "perMachine": false,
-      "allowToChangeInstallationDirectory": false,
+      "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "Shine Browser",
       "menuCategory": "Shine Browser",
       "differentialPackage": false,
-      "license": "LICENSE"
+      "license": "LICENSE",
+      "uninstallDisplayName": "Shine Browser",
+      "deleteAppDataOnUninstall": false,
+      "warningsAsErrors": false
     }
   }
 }

@@ -1,5 +1,5 @@
-/* =====================================================================
-   Shine Browser — chrome UI
+﻿/* =====================================================================
+   Shine Browser â€” chrome UI
    Design language taken straight from shineai-9mr.pages.dev:
    pure black canvas, white ink, rgba(255,255,255,.5) resting color,
    glassy 1px borders, rounded 10-14px, Inter, quick motion.
@@ -17,9 +17,9 @@
   --glass-2: rgba(255, 255, 255, 0.075);
   --hover: rgba(255, 255, 255, 0.09);
   --accent: #ffffff;
-  --blue: #60a5fa;
-  --green: #34d399;
-  --red: #f87171;
+  --blue: #ffffff;
+  --green: #ffffff;
+  --red: #ffffff;
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
   --title-h: 42px;
   --tabs-h: 34px;
@@ -104,7 +104,7 @@ body {
 }
 .wc svg { width: 11px; height: 11px; fill: none; stroke: currentColor; stroke-width: 1.4; }
 .wc:hover { background: var(--hover); color: var(--ink); }
-.wc-close:hover { background: #e50914; color: #fff; }
+.wc-close:hover { background: rgba(255, 255, 255, 0.16); color: #fff; }
 
 /* ======================= TAB STRIP ================================== */
 #tabStrip {
@@ -212,12 +212,7 @@ body {
 
 /* ======================= CONTENT =================================== */
 #content { flex: 1; position: relative; overflow: hidden; }
-#webArea { position: absolute; inset: 0; }
-#webArea webview {
-  position: absolute; top: 0; left: 0;
-  width: 100%; height: 100%;
-  border: none; background: #fff;
-}
+#webArea { position: absolute; inset: 0; background: #fff; }
 
 /* ======================= SHINE PANEL =============================== */
 #shinePanel {
@@ -255,10 +250,6 @@ body {
 @keyframes pulse { 0%, 100% { opacity: .5; } 50% { opacity: 1; } }
 .shine-head-actions { display: flex; align-items: center; gap: 2px; }
 #shineHost { flex: 1; position: relative; background: #000; }
-#shineHost webview {
-  position: absolute; inset: 0; width: 100%; height: 100%;
-  border: none; background: #000;
-}
 
 /* ======================= SELECTION ACTION BAR ====================== */
 #selectionBar {
@@ -470,45 +461,6 @@ input[type="checkbox"] { accent-color: #fff; width: 15px; height: 15px; }
 }
 @keyframes toastIn { from { opacity: 0; transform: translate(-50%, 12px); } to { opacity: 1; transform: translate(-50%, 0); } }
 
-/* ======================= SETUP WINDOW ============================== */
-.setup-window {
-  position: fixed; inset: 0; z-index: 500;
-  background: #000;
-  display: flex; align-items: center; justify-content: center;
-  animation: overlayIn .3s ease both;
-}
-.setup-card { width: min(560px, 92vw); text-align: center; }
-.setup-logo { display: flex; justify-content: center; margin-bottom: 20px; }
-.setup-logo .shine-spark { width: 46px; height: 46px; color: #fff; animation: logoGlow 3s ease-in-out infinite; }
-@keyframes logoGlow {
-  0%, 100% { filter: drop-shadow(0 0 6px rgba(255,255,255,.25)); transform: scale(1); }
-  50% { filter: drop-shadow(0 0 22px rgba(255,255,255,.7)); transform: scale(1.06); }
-}
-.setup-title { font-size: 26px; font-weight: 400; letter-spacing: -.02em; margin-bottom: 8px; }
-.setup-sub { color: var(--ink-50); font-size: 14px; margin-bottom: 30px; }
-.setup-choices {
-  display: flex; flex-direction: column; gap: 12px; text-align: left;
-  border: 1px solid var(--line-soft); border-radius: 14px; padding: 18px;
-  background: var(--glass); margin-bottom: 20px;
-}
-.setup-choice { display: flex; align-items: center; gap: 12px; font-size: 13.5px; color: var(--ink-70); cursor: pointer; }
-.setup-choice strong { color: var(--ink); font-weight: 500; }
-.setup-steps { display: flex; flex-direction: column; gap: 9px; margin-bottom: 22px; text-align: left; min-height: 0; }
-.setup-step {
-  display: flex; align-items: center; gap: 10px;
-  font-size: 13px; color: var(--ink-50);
-  padding: 10px 14px; border: 1px solid var(--line-soft); border-radius: 10px; background: var(--glass);
-}
-.setup-step.done { color: var(--ink-70); border-color: rgba(52, 211, 153, .3); }
-.setup-step .dot {
-  width: 14px; height: 14px; border-radius: 50%; flex: none;
-  border: 1.5px solid var(--ink-20);
-}
-.setup-step.active .dot { border-top-color: var(--ink); border-right-color: var(--ink); animation: spin .7s linear infinite; border-width: 1.5px; }
-.setup-step.done .dot { background: var(--green); border-color: var(--green); }
-.setup-actions { display: flex; gap: 12px; justify-content: center; margin-bottom: 14px; }
-.setup-note { font-size: 11.5px; color: var(--ink-35); }
-
 /* scrollbars */
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-thumb { background: rgba(255,255,255,.12); border-radius: 6px; border: 3px solid transparent; background-clip: content-box; }
@@ -525,4 +477,3 @@ body.light {
 body.light .menu, body.light .side-panel { background: rgba(255,255,255,.97); }
 body.light #selectionBar { background: rgba(255,255,255,.94); }
 body.light .btn-primary { background: #171717; color: #fff; }
-body.light #webArea webview { background: #fff; }

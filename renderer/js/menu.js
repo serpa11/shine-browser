@@ -136,7 +136,7 @@
     });
     document.getElementById('reRunSetup').addEventListener('click', () => {
       document.getElementById('settingsWindow').classList.add('hidden');
-      if (SB.setup) SB.setup.show();
+      if (SB.ipc.setup && SB.ipc.setup.open) SB.ipc.setup.open();
     });
 
     // find bar
@@ -270,8 +270,11 @@
       }
       case 'copy': navigator.clipboard.writeText(q).then(() => SB.toast('Copied to clipboard')); break;
       case 'translate': SB.ipc.shine.ask(q, 'translate'); SB.toast('Asking Shine to translate…'); break;
-      case 'undo': SB.ipc.tab.op(tab.id, 'op', 'undo'); break;
-      case 'cut': document.execCommand('cut'); break;
+      case 'undo': SB.ipc.tab.op(tab.id, 'undo'); break;
+      case 'redo': SB.ipc.tab.op(tab.id, 'redo'); break;
+      case 'cut': SB.ipc.tab.op(tab.id, 'cut'); break;
+      case 'paste': SB.ipc.tab.op(tab.id, 'paste'); break;
+      case 'select-all': SB.ipc.tab.op(tab.id, 'select-all'); break;
       case 'copy-link': navigator.clipboard.writeText(params.linkURL); SB.toast('Link copied'); break;
       case 'open-link-new': SB.createTab({ url: params.linkURL, incognito: tab.incognito }); break;
       case 'save-link': navigator.clipboard.writeText(params.linkURL); SB.toast('URL copied — use Ctrl+S in the page to save.'); break;

@@ -1,8 +1,10 @@
 // =====================================================================
 // Shine Browser — installer / setup window backend
-// Creates the Desktop shortcut, Start Menu shortcut, pins the taskbar
-// tile and records setup state. Used by the in-app setup window and by
-// scripts/install.ps1 for a standalone install.
+//
+// Installs the packaged build into %LOCALAPPDATA%\Shine Browser and
+// creates the Desktop / Start menu shortcuts plus the taskbar pin.
+// Shortcuts always point at a real GUI .exe (never electron.cmd), so
+// double-clicking them never flashes a console window.
 // =====================================================================
 const { app } = require('electron');
 const path = require('path');
@@ -11,50 +13,88 @@ const { execFile } = require('child_process');
 const store = require('./store');
 
 const isWin = process.platform === 'win32';
+const APP_NAME = 'Shine Browser';
 
 function runPs(script, timeout = 30000) {
   return new Promise((resolve) => {
     execFile(
       'powershell.exe',
-      ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script],
+      ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', String(script)],
       { timeout, windowsHide: true, maxBuffer: 8 * 1024 * 1024 },
-      (err, stdout, stderr) => resolve({ ok: !err, stdout: (stdout || '').trim(), stderr: (stderr || '').trim() })
+      (err, stdout) => resolve({ ok: !err, out: (stdout || '').trim() })
     );
   });
-}
-
-function targetExe() {
-  // In a packaged build the exe is the app itself; in dev it is the electron binary.
-  if (app.isPackaged) return process.execPath;
-  const electronBin = path.join(
-    __dirname, '..', 'node_modules', '.bin',
-    isWin ? 'electron.cmd' : 'electron'
-  );
-  return electronBin;
 }
 
 function psQuote(s) {
   return `'${String(s).replace(/'/g, "''")}'`;
 }
 
-// Windows 10/11 no longer expose "Pin to taskbar" through Shell verbs, and
-// SendKeys/UI automation is unreliable. The TaskBar folder under the Quick
-// Launch profile IS the canonical pin store — copying the .lnk there pins the
-// app. Refresh the icon cache afterwards so Explorer picks it up immediately.
-async function pinViaTaskbarFolder(shortcutName) {
+function localAppData() {
+  // app.getPath('localAppData') is not resolvable in every Electron build,
+  // so fall back to the environment / derive it from appData.
+  try {
+    const p = app.getPath('localAppData');
+    if (p) return p;
+  } catch (e) { /* fall through */ }
+  if (process.env.LOCALAPPDATA) return process.env.LOCALAPPDATA;
+  return path.join(app.getPath('appData'), '..', 'Local');
+}
+
+function installDir() {
+  return path.join(localAppData(), APP_NAME);
+}
+
+// Packaged build produced by `npm run pack` / `npm run dist`.
+function sourceBuild() {
+  const unpacked = path.join(__dirname, '..', 'dist', 'win-unpacked');
+  const exe = path.join(unpacked, `${APP_NAME}.exe`);
+  if (fs.existsSync(exe)) return { dir: unpacked, exe, packaged: true };
+  return null;
+}
+
+// Where a shortcut should point. Packaged builds copy files first; the dev
+// fallback points at the real Electron GUI binary (not electron.cmd).
+function targetExe() {
+  const build = sourceBuild();
+  if (build) return build.exe;
+  if (app.isPackaged) return process.execPath;
+  const electronExe = path.join(__dirname, '..', 'node_modules', 'electron', 'dist', 'electron.exe');
+  return fs.existsSync(electronExe) ? electronExe : process.execPath;
+}
+
+function copyDir(src, dest) {
+  fs.mkdirSync(dest, { recursive: true });
+  fs.cpSync(src, dest, { recursive: true, force: true, dereference: true });
+}
+
+function makeShortcutPs({ lnkPath, target, workingDir, icon, description }) {
+  return `
+$ErrorActionPreference='Stop'
+$sh = New-Object -ComObject WScript.Shell
+$lnk = $sh.CreateShortcut(${psQuote(lnkPath)})
+$lnk.TargetPath = ${psQuote(target)}
+$lnk.WorkingDirectory = ${psQuote(workingDir)}
+$lnk.IconLocation = ${psQuote(icon)}
+$lnk.Description = ${psQuote(description)}
+$lnk.Save()
+Write-Output 'OK'
+`;
+}
+
+// Windows 10/11 no longer expose "Pin to taskbar" through Shell verbs.
+// The TaskBar folder under the Quick Launch profile is the canonical pin
+// store — copying the .lnk there pins the app.
+async function pinToTaskbar(desktopLnk) {
   const taskBarDir = path.join(
     process.env.APPDATA || '',
     'Microsoft', 'Internet Explorer', 'Quick Launch', 'User Pinned', 'TaskBar'
   );
-  const source = path.join(app.getPath('desktop'), `${shortcutName}.lnk`);
-  const dest = path.join(taskBarDir, `${shortcutName}.lnk`);
-
+  const dest = path.join(taskBarDir, `${APP_NAME}.lnk`);
   try {
-    if (!fs.existsSync(taskBarDir)) {
-      fs.mkdirSync(taskBarDir, { recursive: true });
-    }
-    if (!fs.existsSync(source)) return 'FAILED';
-    fs.copyFileSync(source, dest);
+    fs.mkdirSync(taskBarDir, { recursive: true });
+    if (!fs.existsSync(desktopLnk)) return 'FAILED';
+    fs.copyFileSync(desktopLnk, dest);
     await runPs('ie4uinit.exe -show', 10000);
     return fs.existsSync(dest) ? 'PINNED' : 'FAILED';
   } catch (e) {
@@ -62,125 +102,139 @@ async function pinViaTaskbarFolder(shortcutName) {
   }
 }
 
-function makeShortcutPs({ lnkPath, target, args, workingDir, icon, description }) {
-  return `
-$ErrorActionPreference='Stop'
-$sh = New-Object -ComObject WScript.Shell
-$lnk = $sh.CreateShortcut(${psQuote(lnkPath)})
-$lnk.TargetPath = ${psQuote(target)}
-if (${psQuote(args)}) { $lnk.Arguments = ${psQuote(args)} }
-if (${psQuote(workingDir)}) { $lnk.WorkingDirectory = ${psQuote(workingDir)} }
-if (${psQuote(icon)}) { $lnk.IconLocation = ${psQuote(icon)} }
-if (${psQuote(description)}) { $lnk.Description = ${psQuote(description)} }
-$lnk.Save()
-Write-Output 'OK'
-`;
-}
-
 async function ensureShortcuts(opts = {}) {
-  if (!isWin) return { ok: false, error: 'Shortcuts are Windows-only' };
+  const steps = [];
+  const results = { desktop: null, startMenu: null, pinned: '' };
+
   const exe = targetExe();
   const exeDir = path.dirname(exe);
-  const icon = app.isPackaged ? `${exe},0` : path.join(__dirname, '..', 'build', 'icon.ico');
-
-  const desktop = path.join(app.getPath('desktop'), 'Shine Browser.lnk');
-  const startMenu = path.join(
-    app.getPath('appData'),
-    'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Shine Browser.lnk'
-  );
-  const startMenuFolder = path.join(
-    app.getPath('appData'),
-    'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Shine Browser'
-  );
-
+  const icon = `${exe},0`;
   const desc = 'Shine Browser — browse with Shine AI side by side';
 
-  const results = {};
+  const desktopLnk = path.join(app.getPath('desktop'), `${APP_NAME}.lnk`);
+  const startDir = path.join(
+    app.getPath('appData'),
+    'Microsoft', 'Windows', 'Start Menu', 'Programs', APP_NAME
+  );
+  const startLnk = path.join(startDir, `${APP_NAME}.lnk`);
+  const startFlat = path.join(
+    app.getPath('appData'),
+    'Microsoft', 'Windows', 'Start Menu', 'Programs', `${APP_NAME}.lnk`
+  );
 
-  // Desktop + Start Menu shortcuts -----------------------------------------
-  results.desktop = await runPs(makeShortcutPs({
-    lnkPath: desktop, target: exe, args: '', workingDir: exeDir, icon, description: desc,
-  }));
+  // 1. copy application files -------------------------------------------
+  if (opts.copyFiles !== false) {
+    const build = sourceBuild();
+    const dest = installDir();
+    steps.push({ key: 'files', label: 'Copy application files' });
+    if (build) {
+      try {
+        if (path.resolve(build.dir) !== path.resolve(dest)) {
+          copyDir(build.dir, dest);
+        }
+        results.installedTo = dest;
+      } catch (e) {
+        steps[steps.length - 1].error = String(e.message || e);
+      }
+    } else if (app.isPackaged) {
+      // already running from an installed location
+      results.installedTo = exeDir;
+    } else {
+      steps[steps.length - 1].note = 'using source build (run npm run pack to install a copy)';
+      results.installedTo = exeDir;
+    }
+    // shortcuts must point at the installed exe
+    const installedExe = fs.existsSync(path.join(dest, `${APP_NAME}.exe`))
+      ? path.join(dest, `${APP_NAME}.exe`)
+      : exe;
+    results.exe = installedExe;
+    results.exeDir = path.dirname(installedExe);
+    results.icon = `${installedExe},0`;
+  }
 
-  try { fs.mkdirSync(startMenuFolder, { recursive: true }); } catch (e) { /* ignore */ }
-  results.startMenu = await runPs(makeShortcutPs({
-    lnkPath: path.join(startMenuFolder, 'Shine Browser.lnk'),
-    target: exe, args: '', workingDir: exeDir, icon, description: desc,
-  }));
-  // Also place a flat shortcut directly in Programs for the Start menu search.
-  results.startMenuFlat = await runPs(makeShortcutPs({
-    lnkPath: startMenu, target: exe, args: '', workingDir: exeDir, icon, description: desc,
-  }));
+  const finalExe = results.exe || exe;
+  const finalDir = results.exeDir || exeDir;
+  const finalIcon = results.icon || icon;
 
-  // Pin to taskbar + Start (Windows 10/11) ---------------------------------
+  // 2. desktop shortcut ---------------------------------------------------
+  if (opts.desktop !== false) {
+    steps.push({ key: 'desktop', label: 'Desktop shortcut' });
+    const r = await runPs(makeShortcutPs({
+      lnkPath: desktopLnk, target: finalExe, workingDir: finalDir, icon: finalIcon, description: desc,
+    }));
+    results.desktop = { path: desktopLnk, ok: r.ok && fs.existsSync(desktopLnk) };
+    if (!results.desktop.ok) steps[steps.length - 1].error = 'could not create shortcut';
+  }
+
+  // 3. start menu shortcut ------------------------------------------------
+  if (opts.startMenu !== false) {
+    steps.push({ key: 'start', label: 'Start menu shortcut' });
+    try { fs.mkdirSync(startDir, { recursive: true }); } catch (e) { /* ignore */ }
+    const r1 = await runPs(makeShortcutPs({
+      lnkPath: startLnk, target: finalExe, workingDir: finalDir, icon: finalIcon, description: desc,
+    }));
+    const r2 = await runPs(makeShortcutPs({
+      lnkPath: startFlat, target: finalExe, workingDir: finalDir, icon: finalIcon, description: desc,
+    }));
+    results.startMenu = {
+      path: startDir,
+      ok: (r1.ok && fs.existsSync(startLnk)) || (r2.ok && fs.existsSync(startFlat)),
+    };
+    if (!results.startMenu.ok) steps[steps.length - 1].error = 'could not create shortcut';
+  }
+
+  // 4. taskbar pin --------------------------------------------------------
   if (opts.pinTaskbar !== false) {
-    results.pinned = { stdout: await pinViaTaskbarFolder('Shine Browser') };
+    steps.push({ key: 'taskbar', label: 'Pin to taskbar' });
+    if (fs.existsSync(desktopLnk)) {
+      results.pinned = await pinToTaskbar(desktopLnk);
+      if (results.pinned !== 'PINNED') {
+        steps[steps.length - 1].error = 'pin attempted — right-click the Desktop shortcut → Pin to taskbar';
+      }
+    } else {
+      results.pinned = 'FAILED';
+      steps[steps.length - 1].error = 'needs a Desktop shortcut first';
+    }
   }
 
-  if (opts.pinStart !== false) {
-    results.pinnedStart = await runPs(`
-$ErrorActionPreference='SilentlyContinue'
-$sh = New-Object -ComObject Shell.Application
-$folder = $sh.Namespace('${startMenuFolder.replace(/'/g, "''")}')
-$item = $folder.ParseName('Shine Browser.lnk')
-if ($item) {
-  $verb = $item.Verbs() | Where-Object { $_.Name -match 'Pin to Start|Start' } | Select-Object -First 1
-  if ($verb) { $verb.DoIt() ; Write-Output 'PINNED_START' } else { Write-Output 'NO_VERB' }
-} else { Write-Output 'NO_ITEM' }
-`);
-  }
-
-  const ok = results.desktop.ok && results.startMenu.ok;
+  const ok = results.desktop === null || results.desktop.ok;
   const s = store.read('settings');
   s.setupDone = true;
   s.firstRun = false;
   store.write('settings', s);
 
-  return {
-    ok,
-    desktop: { path: desktop, ok: results.desktop.ok },
-    startMenu: { path: startMenuFolder, ok: results.startMenu.ok },
-    pinned: results.pinned ? results.pinned.stdout : '',
-    pinnedStart: results.pinnedStart ? results.pinnedStart.stdout : '',
-    exe,
-  };
+  return { ok, steps, installedTo: results.installedTo || finalDir, exe: finalExe, pinned: results.pinned };
 }
 
 function status() {
   const s = store.read('settings');
-  const exe = targetExe();
-  const desktop = path.join(app.getPath('desktop'), 'Shine Browser.lnk');
-  const startMenuFolder = path.join(
+  const build = sourceBuild();
+  const desktopLnk = path.join(app.getPath('desktop'), `${APP_NAME}.lnk`);
+  const startDir = path.join(
     app.getPath('appData'),
-    'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Shine Browser'
+    'Microsoft', 'Windows', 'Start Menu', 'Programs', APP_NAME
   );
   return {
     setupDone: !!s.setupDone,
     firstRun: !!s.firstRun,
-    exe,
-    installed: app.isPackaged,
-    desktopShortcut: isWin && fs.existsSync(desktop),
-    startMenuShortcut: isWin && fs.existsSync(startMenuFolder),
+    hasBuild: !!build || app.isPackaged,
+    buildPath: build ? build.exe : null,
+    installDir: installDir(),
+    exe: targetExe(),
+    desktopShortcut: isWin && fs.existsSync(desktopLnk),
+    startMenuShortcut: isWin && fs.existsSync(startDir),
     version: app.getVersion(),
-    userData: app.getPath('userData'),
+    packaged: app.isPackaged,
     platform: process.platform,
   };
 }
 
 async function run(opts) {
-  const steps = [];
-  const r1 = await ensureShortcuts(opts);
-  steps.push({ key: 'desktop', label: 'Desktop shortcut', ok: r1.ok, detail: r1.desktop && r1.desktop.path });
-  steps.push({ key: 'start', label: 'Start menu shortcut', ok: r1.ok, detail: r1.startMenu && r1.startMenu.path });
-  steps.push({
-    key: 'taskbar',
-    label: 'Taskbar pin',
-    ok: /PINNED/.test(r1.pinned || ''),
-    detail: /PINNED/.test(r1.pinned || '')
-      ? 'Pinned to taskbar'
-      : 'Pin attempted — right-click the Desktop shortcut → Pin to taskbar if it is missing',
-  });
-  return { ok: r1.ok, steps, info: status() };
+  try {
+    return await ensureShortcuts(opts || {});
+  } catch (e) {
+    return { ok: false, steps: [], error: String(e.message || e) };
+  }
 }
 
-module.exports = { ensureShortcuts, status, run, targetExe };
+module.exports = { ensureShortcuts, status, run, targetExe, installDir };

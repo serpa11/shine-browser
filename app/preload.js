@@ -23,7 +23,7 @@ contextBridge.exposeInMainWorld('shine', {
 
   // tabs (web contents managed by the main process)
   tab: {
-    create: (tabId, incognito) => send('tab:create', { tabId, incognito }),
+    create: (tabId, incognito, url) => send('tab:create', { tabId, incognito, url }),
     destroy: (tabId) => send('tab:destroy', { tabId }),
     layout: () => send('tab:layout'),
     show: (tabId) => send('tab:show', { tabId }),
@@ -31,6 +31,7 @@ contextBridge.exposeInMainWorld('shine', {
     op: (tabId, op, arg) => send('tab:op', { tabId, op, arg }),
     info: (tabId) => invoke('tab:info', { tabId }),
     selection: (tabId) => invoke('tab:selection', { tabId }),
+    selectionRect: (tabId) => invoke('tab:selectionRect', { tabId }),
     pageText: (tabId) => invoke('tab:page-text', { tabId }),
   },
 
@@ -38,11 +39,9 @@ contextBridge.exposeInMainWorld('shine', {
   shine: {
     toggle: () => send('shine:toggle'),
     isOpen: () => invoke('shine:is-open'),
-    ready: () => invoke('shine:ready'),
     setWidth: (r) => send('shine:set-width', r),
     ask: (text, mode) => send('shine:ask', { text, mode }),
     send: (text) => send('shine:send', { text }),
-    pageSelection: () => invoke('shine:page-selection'),
     on: (channel, cb) => on(channel, cb),
   },
 
@@ -93,6 +92,7 @@ contextBridge.exposeInMainWorld('shine', {
   setup: {
     status: () => invoke('setup:status'),
     run: (opts) => invoke('setup:run', opts),
+    open: () => send('setup:open'),
   },
 
   // generic event stream from the main process
@@ -100,6 +100,7 @@ contextBridge.exposeInMainWorld('shine', {
     const channels = [
       'tab:loading', 'tab:title', 'tab:favicon', 'tab:navigate', 'tab:fail',
       'tab:zoom', 'tab:crashed', 'tab:context-menu', 'tab:open-external-tab',
+      'tab:selection', 'kb:shortcut',
       'shine:open-url', 'shine:search', 'shine:new-tab', 'shine:close-tab',
       'shine:reload', 'shine:history-back', 'shine:history-forward',
       'shine:bookmark-current', 'shine:toast', 'shine:state',
