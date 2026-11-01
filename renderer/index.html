@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self' https://shineai-9mr.pages.dev data: blob:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: https:; connect-src 'self' https:; frame-src https://shineai-9mr.pages.dev; media-src 'self' blob: https:;" />
+  <title>Shine Browser</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app">
+
+    <!-- ================= SETUP WINDOW (first run) ================= -->
+    <div id="setupWindow" class="setup-window hidden">
+      <div class="setup-card">
+        <div class="setup-logo">
+          <svg viewBox="0 0 24 24" class="shine-spark"><path d="M12 2c.6 4.6 5.4 9.4 10 10-4.6.6-9.4 5.4-10 10-.6-4.6-5.4-9.4-10-10 4.6-.6 9.4-5.4 10-10Z"/></svg>
+        </div>
+        <h1 class="setup-title">Install Shine Browser</h1>
+        <p class="setup-sub">A powerful Safari-styled browser with Shine AI built in.</p>
+
+        <div class="setup-choices">
+          <label class="setup-choice">
+            <input type="checkbox" id="setupDesktop" checked />
+            <span>Create a <strong>Desktop shortcut</strong></span>
+          </label>
+          <label class="setup-choice">
+            <input type="checkbox" id="setupStart" checked />
+            <span>Add a <strong>Start menu</strong> shortcut</span>
+          </label>
+          <label class="setup-choice">
+            <input type="checkbox" id="setupTaskbar" checked />
+            <span><strong>Pin to taskbar</strong></span>
+          </label>
+        </div>
+
+        <div class="setup-steps" id="setupSteps"></div>
+
+        <div class="setup-actions">
+          <button class="btn-ghost" id="setupSkip">Skip</button>
+          <button class="btn-primary" id="setupInstall">Install Shine Browser</button>
+        </div>
+        <p class="setup-note" id="setupNote">Installs to %LOCALAPPDATA%\Shine Browser — no admin rights required.</p>
+      </div>
+    </div>
+
+    <!-- ================= TITLE BAR ================= -->
+    <div id="titleBar">
+      <div class="brand" id="brandBtn" title="Shine Browser">
+        <svg viewBox="0 0 24 24" class="shine-spark"><path d="M12 2c.6 4.6 5.4 9.4 10 10-4.6.6-9.4 5.4-10 10-.6-4.6-5.4-9.4-10-10 4.6-.6 9.4-5.4 10-10Z"/></svg>
+        <span>Shine Browser</span>
+      </div>
+
+      <!-- Safari-style floating control cluster (from the Shine UI) -->
+      <div class="control-cluster" id="controlCluster">
+        <button class="icon-btn" id="btnSidebar" title="Show sidebar">
+          <svg class="svg-icon" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.5"/><line x1="9.5" y1="4" x2="9.5" y2="20"/></svg>
+        </button>
+        <button class="icon-btn" id="btnSplit" title="Split screen with Shine">
+          <svg class="svg-icon" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.5"/><line x1="13" y1="4" x2="13" y2="20"/><path d="M6.5 12h3M16.5 9.5 19 12l-2.5 2.5"/></svg>
+        </button>
+        <button class="icon-btn" id="btnFind" title="Search / Find in page">
+          <svg class="svg-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><line x1="16" y1="16" x2="21" y2="21"/></svg>
+        </button>
+        <button class="icon-btn" id="btnShine" title="Ask Shine">
+          <svg class="svg-icon" viewBox="0 0 24 24"><path d="M12 3c.6 4.2 4.8 8.4 9 9-4.2.6-8.4 4.8-9 9-.6-4.2-4.8-8.4-9-9 4.2-.6 8.4-4.8 9-9Z"/></svg>
+        </button>
+      </div>
+
+      <div class="window-controls" id="windowControls">
+        <button class="wc" id="wcMin" title="Minimize"><svg viewBox="0 0 12 12"><line x1="1" y1="6" x2="11" y2="6"/></svg></button>
+        <button class="wc" id="wcMax" title="Maximize"><svg viewBox="0 0 12 12"><rect x="1.5" y="1.5" width="9" height="9" rx="1"/></svg></button>
+        <button class="wc wc-close" id="wcClose" title="Close"><svg viewBox="0 0 12 12"><path d="M2 2l8 8M10 2l-8 8"/></svg></button>
+      </div>
+    </div>
+
+    <!-- ================= TAB STRIP ================= -->
+    <div id="tabStrip">
+      <div id="tabs" role="tablist"></div>
+      <button id="newTabBtn" title="New tab (Ctrl+T)">
+        <svg class="svg-icon" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      </button>
+      <div id="tabActions">
+        <button class="icon-btn" id="btnTabSearch" title="Search tabs">
+          <svg class="svg-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><line x1="16" y1="16" x2="21" y2="21"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- ================= TOOLBAR ================= -->
+    <div id="toolbar">
+      <button class="icon-btn nav-btn" id="btnBack" title="Back (Alt+←)">
+        <svg class="svg-icon" viewBox="0 0 24 24"><path d="M14.5 5 8 12l6.5 7"/></svg>
+      </button>
+      <button class="icon-btn nav-btn" id="btnForward" title="Forward (Alt+→)">
+        <svg class="svg-icon" viewBox="0 0 24 24"><path d="M9.5 5 16 12l-6.5 7"/></svg>
+      </button>
+      <button class="icon-btn nav-btn" id="btnReload" title="Reload (Ctrl+R)">
+        <svg class="svg-icon" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.5-5.8"/><path d="M20 4v4.5h-4.5"/></svg>
+      </button>
+
+      <!-- Safari-style omnibox -->
+      <div id="omniWrap">
+        <div id="omni">
+          <svg class="svg-icon omni-lock" id="omniIcon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><line x1="16" y1="16" x2="21" y2="21"/></svg>
+          <input id="omnibox" type="text" autocomplete="off" spellcheck="false"
+                 placeholder="Search or enter website" />
+          <button class="icon-btn omni-star" id="btnBookmark" title="Add favorite (Ctrl+D)">
+            <svg class="svg-icon" viewBox="0 0 24 24"><path d="M7 4h10a1 1 0 0 1 1 1v15l-6-4-6 4V5a1 1 0 0 1 1-1Z"/></svg>
+          </button>
+        </div>
+        <div id="omniSuggestions" class="panel hidden"></div>
+      </div>
+
+      <div class="toolbar-right">
+        <button class="icon-btn" id="btnExtensions" title="Extensions">
+          <svg class="svg-icon" viewBox="0 0 24 24"><path d="M10 3.5a2.5 2.5 0 0 1 5 0V6h3a1 1 0 0 1 1 1v3h2.5a2.5 2.5 0 0 1 0 5H19v3a1 1 0 0 1-1 1h-3v-2.5a2.5 2.5 0 0 0-5 0V19H7a1 1 0 0 1-1-1v-3H3.5a2.5 2.5 0 0 1 0-5H6V7a1 1 0 0 1 1-1h3V3.5Z"/></svg>
+        </button>
+        <button class="icon-btn" id="btnDownloads" title="Downloads">
+          <svg class="svg-icon" viewBox="0 0 24 24"><path d="M12 4v11"/><path d="M8 11.5 12 15.5l4-4"/><path d="M5 19h14"/></svg>
+        </button>
+        <button class="icon-btn" id="btnHistory" title="History (Ctrl+H)">
+          <svg class="svg-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 7.5V12l3 2"/></svg>
+        </button>
+        <button class="icon-btn" id="btnFavorites" title="Favorites">
+          <svg class="svg-icon" viewBox="0 0 24 24"><path d="M7 4h10a1 1 0 0 1 1 1v15l-6-4-6 4V5a1 1 0 0 1 1-1Z"/></svg>
+        </button>
+        <button class="icon-btn" id="btnProfile" title="Profile">
+          <svg class="svg-icon" viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="3.5"/><path d="M5 19.5c1.4-3.4 4-5 7-5s5.6 1.6 7 5"/></svg>
+        </button>
+        <button class="icon-btn" id="btnMenu" title="Menu">
+          <svg class="svg-icon" viewBox="0 0 24 24"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- ================= CONTENT ================= -->
+    <div id="content">
+      <div id="webArea"></div>
+
+      <!-- Shine split-screen panel -->
+      <div id="shinePanel" class="hidden">
+        <div id="shineResize" title="Drag to resize"></div>
+        <div id="shineHead">
+          <div class="shine-head-brand">
+            <svg viewBox="0 0 24 24" class="shine-spark sm"><path d="M12 2c.6 4.6 5.4 9.4 10 10-4.6.6-9.4 5.4-10 10-.6-4.6-5.4-9.4-10-10 4.6-.6 9.4-5.4 10-10Z"/></svg>
+            <span>Shine AI</span>
+            <span class="live-dot" title="Connected"></span>
+          </div>
+          <div class="shine-head-actions">
+            <button class="icon-btn sm" id="shineAskSel" title="Ask Shine about my selection">
+              <svg class="svg-icon" viewBox="0 0 24 24"><path d="M12 3c.6 4.2 4.8 8.4 9 9-4.2.6-8.4 4.8-9 9-.6-4.2-4.8-8.4-9-9 4.2-.6 8.4-4.8 9-9Z"/></svg>
+            </button>
+            <button class="icon-btn sm" id="shineMax" title="Maximize panel">
+              <svg class="svg-icon" viewBox="0 0 24 24"><path d="M9 4H4v5M15 4h5v5M9 20H4v-5M15 20h5v-5"/></svg>
+            </button>
+            <button class="icon-btn sm" id="shineClose" title="Close Shine">
+              <svg class="svg-icon" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
+            </button>
+          </div>
+        </div>
+        <div id="shineHost"></div>
+      </div>
+    </div>
+
+    <!-- ================= SELECTION ACTION BAR ================= -->
+    <div id="selectionBar" class="hidden">
+      <button data-act="ask"><svg class="svg-icon" viewBox="0 0 24 24"><path d="M12 3c.6 4.2 4.8 8.4 9 9-4.2.6-8.4 4.8-9 9-.6-4.2-4.8-8.4-9-9 4.2-.6 8.4-4.8 9-9Z"/></svg><span>Ask Shine</span></button>
+      <button data-act="google"><svg class="svg-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><line x1="16" y1="16" x2="21" y2="21"/></svg><span>Search on Google</span></button>
+      <button data-act="site"><svg class="svg-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M4 12h16M12 4c2.5 2.4 2.5 13.2 0 16M12 4c-2.5 2.4-2.5 13.2 0 16"/></svg><span>Search this site</span></button>
+      <button data-act="copy"><svg class="svg-icon" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg><span>Copy</span></button>
+      <button data-act="translate"><svg class="svg-icon" viewBox="0 0 24 24"><path d="M4 6h9M8.5 4v2c0 4-2 7-4.5 8.5"/><path d="M6 10c1.5 2.5 3.5 4 6 5"/><path d="M13 20l3.5-9 3.5 9M14.5 17h5"/></svg><span>Translate</span></button>
+      <button data-act="define"><svg class="svg-icon" viewBox="0 0 24 24"><path d="M5 5h6a3 3 0 0 1 3 3v11a2.5 2.5 0 0 0-2.5-2.5H5Z"/><path d="M19 5h-2.5A2.5 2.5 0 0 0 14 7.5V19a2.5 2.5 0 0 1 2.5-2.5H19Z"/></svg><span>Define</span></button>
+      <button data-act="print"><svg class="svg-icon" viewBox="0 0 24 24"><path d="M7 9V4h10v5"/><rect x="4" y="9" width="16" height="7" rx="2"/><path d="M7 14h10v6H7z"/></svg><span>Print</span></button>
+      <button data-act="more"><svg class="svg-icon" viewBox="0 0 24 24"><circle cx="6" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="18" cy="12" r="1.4"/></svg><span>More</span></button>
+    </div>
+
+    <!-- ================= FLOATING PANELS ================= -->
+    <div id="panelHistory" class="side-panel hidden">
+      <div class="panel-head">
+        <span>History</span>
+        <div>
+          <button class="btn-link" id="clearHistory">Clear all</button>
+          <button class="icon-btn sm panel-close" data-close="panelHistory"><svg class="svg-icon" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+        </div>
+      </div>
+      <div class="panel-search"><input id="historySearch" placeholder="Search history" /></div>
+      <div class="panel-body" id="historyList"></div>
+    </div>
+
+    <div id="panelFavorites" class="side-panel hidden">
+      <div class="panel-head">
+        <span>Favorites</span>
+        <div>
+          <button class="btn-link" id="importBookmarks">Import</button>
+          <button class="icon-btn sm panel-close" data-close="panelFavorites"><svg class="svg-icon" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+        </div>
+      </div>
+      <div class="panel-body" id="favoritesList"></div>
+    </div>
+
+    <div id="panelDownloads" class="side-panel hidden">
+      <div class="panel-head">
+        <span>Downloads</span>
+        <div>
+          <button class="btn-link" id="openDownloadsFolder">Open folder</button>
+          <button class="icon-btn sm panel-close" data-close="panelDownloads"><svg class="svg-icon" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+        </div>
+      </div>
+      <div class="panel-body" id="downloadsList"></div>
+    </div>
+
+    <div id="panelExtensions" class="side-panel hidden">
+      <div class="panel-head">
+        <span>Extensions</span>
+        <button class="icon-btn sm panel-close" data-close="panelExtensions"><svg class="svg-icon" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+      </div>
+      <div class="panel-actions">
+        <button class="btn-primary sm" id="extLoad">Load unpacked</button>
+        <button class="btn-ghost sm" id="extStore">Chrome Web Store</button>
+      </div>
+      <div class="panel-body" id="extensionsList"></div>
+      <div class="panel-foot">Extensions run with full Chrome compatibility. Install any .crx from the Chrome Web Store.</div>
+    </div>
+
+    <div id="panelPC" class="side-panel wide hidden">
+      <div class="panel-head">
+        <span>PC Control</span>
+        <button class="icon-btn sm panel-close" data-close="panelPC"><svg class="svg-icon" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+      </div>
+      <div class="panel-tabs" id="pcTabs">
+        <button class="active" data-pc="apps">Apps</button>
+        <button data-pc="system">System</button>
+        <button data-pc="processes">Processes</button>
+      </div>
+      <div class="panel-actions">
+        <input id="pcSearch" placeholder="Search installed apps…" />
+        <button class="btn-ghost sm" id="pcScreenshot">Screenshot</button>
+      </div>
+      <div class="panel-body" id="pcBody"></div>
+    </div>
+
+    <!-- ================= MAIN MENU ================= -->
+    <div id="mainMenu" class="menu hidden">
+      <button data-act="new-tab"><span>New tab</span><kbd>Ctrl+T</kbd></button>
+      <button data-act="new-window"><span>New window</span><kbd>Ctrl+N</kbd></button>
+      <button data-act="new-private"><span>New private window</span><kbd>Ctrl+Shift+N</kbd></button>
+      <div class="menu-sep"></div>
+      <button data-act="history"><span>History</span><kbd>Ctrl+H</kbd></button>
+      <button data-act="downloads"><span>Downloads</span><kbd>Ctrl+J</kbd></button>
+      <button data-act="favorites"><span>Favorites</span><kbd>Ctrl+B</kbd></button>
+      <button data-act="reading-list"><span>Reading list</span></button>
+      <div class="menu-sep"></div>
+      <button data-act="extensions"><span>Extensions</span></button>
+      <button data-act="web-store"><span>Chrome Web Store</span></button>
+      <button data-act="pc-control"><span>PC Control</span></button>
+      <button data-act="shine"><span>Shine split screen</span><kbd>Ctrl+Shift+S</kbd></button>
+      <div class="menu-sep"></div>
+      <button data-act="zoom-in"><span>Zoom in</span><kbd>Ctrl++</kbd></button>
+      <button data-act="zoom-out"><span>Zoom out</span><kbd>Ctrl+-</kbd></button>
+      <button data-act="zoom-reset"><span>Reset zoom</span><kbd>Ctrl+0</kbd></button>
+      <div class="menu-sep"></div>
+      <button data-act="print"><span>Print</span><kbd>Ctrl+P</kbd></button>
+      <button data-act="find"><span>Find on page</span><kbd>Ctrl+F</kbd></button>
+      <button data-act="cast"><span>Cast</span></button>
+      <button data-act="task-manager"><span>Task manager</span></button>
+      <button data-act="screenshot"><span>Screenshot</span></button>
+      <button data-act="devtools"><span>Developer tools</span><kbd>F12</kbd></button>
+      <div class="menu-sep"></div>
+      <button data-act="settings"><span>Settings</span></button>
+      <button data-act="about"><span>About Shine Browser</span></button>
+      <button data-act="quit"><span>Quit</span><kbd>Ctrl+Q</kbd></button>
+    </div>
+
+    <!-- ================= SETTINGS ================= -->
+    <div id="settingsWindow" class="overlay hidden">
+      <div class="overlay-inner">
+        <div class="overlay-head">
+          <h2>Settings</h2>
+          <button class="icon-btn" id="closeSettings"><svg class="svg-icon" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+        </div>
+
+        <div class="settings-group">
+          <h3>Search engine</h3>
+          <select id="setSearchEngine" class="select">
+            <option value="google">Google</option>
+            <option value="bing">Bing</option>
+            <option value="duckduckgo">DuckDuckGo</option>
+            <option value="brave">Brave Search</option>
+            <option value="ecosia">Ecosia</option>
+            <option value="startpage">Startpage</option>
+            <option value="youtube">YouTube</option>
+          </select>
+        </div>
+
+        <div class="settings-group">
+          <h3>On startup</h3>
+          <select id="setStartup" class="select">
+            <option value="homepage">Open Shine</option>
+            <option value="newtab">Open new tab</option>
+            <option value="last">Continue where you left off</option>
+          </select>
+        </div>
+
+        <div class="settings-group">
+          <h3>Downloads</h3>
+          <div class="row">
+            <span id="dlPath">Default downloads folder</span>
+            <button class="btn-ghost sm" id="changeDl">Change</button>
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <h3>Appearance</h3>
+          <div class="row">
+            <span>Shine split-screen width</span>
+            <input type="range" id="setPanelWidth" min="25" max="75" value="42" />
+          </div>
+          <div class="row">
+            <span>Open Shine on startup</span>
+            <input type="checkbox" id="setPanelOpen" />
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <h3>Profiles</h3>
+          <div class="row">
+            <span id="profileName">Person 1</span>
+            <button class="btn-ghost sm" id="renameProfile">Rename</button>
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <h3>About</h3>
+          <div class="about" id="aboutBox">Loading…</div>
+          <button class="btn-ghost sm" id="reRunSetup">Re-run installer / shortcuts</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= TOAST ================= -->
+    <div id="toast" class="hidden"></div>
+
+    <!-- ================= CONTEXT MENU ================= -->
+    <div id="contextMenu" class="menu hidden"></div>
+
+    <!-- ================= FIND BAR ================= -->
+    <div id="findBar" class="find-bar hidden">
+      <input id="findInput" placeholder="Find in page" />
+      <span id="findCount"></span>
+      <button class="icon-btn sm" id="findPrev"><svg class="svg-icon" viewBox="0 0 24 24"><path d="M6 14l6-6 6 6"/></svg></button>
+      <button class="icon-btn sm" id="findNext"><svg class="svg-icon" viewBox="0 0 24 24"><path d="M6 10l6 6 6-6"/></svg></button>
+      <button class="icon-btn sm" id="findClose"><svg class="svg-icon" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    </div>
+  </div>
+
+  <script src="js/data.js"></script>
+  <script src="js/tabs.js"></script>
+  <script src="js/omnibox.js"></script>
+  <script src="js/panels.js"></script>
+  <script src="js/menu.js"></script>
+  <script src="js/selection.js"></script>
+  <script src="js/shine.js"></script>
+  <script src="js/setup.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

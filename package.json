@@ -1,0 +1,63 @@
+{
+  "name": "shine-browser",
+  "productName": "Shine Browser",
+  "version": "1.0.0",
+  "description": "Shine Browser — a Safari-styled browser with the Shine AI UI, split-screen Shine, browser control, PC control, extensions, favorites, and full Chrome parity.",
+  "main": "app/main.js",
+  "author": "serpa11",
+  "license": "MIT",
+  "homepage": "https://github.com/serpa11/shine-browser",
+  "scripts": {
+    "start": "electron .",
+    "icons": "python scripts/make_icon.py",
+    "dist": "electron-builder --win",
+    "pack": "electron-builder --win --dir"
+  },
+  "devDependencies": {
+    "electron": "^45.2.1",
+    "electron-builder": "^26.18.0"
+  },
+  "dependencies": {
+    "adm-zip": "^0.5.16",
+    "windows-shortcuts": "^0.1.6"
+  },
+  "build": {
+    "appId": "com.serpa11.shinebrowser",
+    "productName": "Shine Browser",
+    "artifactName": "ShineBrowserSetup-${version}.${ext}",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "app/**/*",
+      "package.json"
+    ],
+    "compression": "normal",
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "requestedExecutionLevel": "asInvoker"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Shine Browser",
+      "menuCategory": "Shine Browser",
+      "differentialPackage": false,
+      "license": "LICENSE"
+    }
+  }
+}
