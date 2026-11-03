@@ -1,9 +1,25 @@
-// =====================================================================
+﻿// =====================================================================
 // Shine Browser — side panels: Favorites, History, Downloads,
-// Extensions and PC Control.
+// Extensions, PC Control and Browser Control.
+//
+// Panels push the page aside: the renderer reports its width to the main
+// process, which shrinks the active tab view so nothing is ever painted
+// over. Without this the page covers the panel entirely.
 // =====================================================================
 (function () {
-  const PANELS = ['panelHistory', 'panelFavorites', 'panelDownloads', 'panelExtensions', 'panelPC'];
+  const PANELS = ['panelHistory', 'panelFavorites', 'panelDownloads',
+    'panelExtensions', 'panelPC', 'panelBrowser'];
+
+  function syncWidth() {
+    // the panel that is currently visible; report its width so main can
+    // shrink the tab view to keep it fully visible.
+    const open = PANELS.find((id) => {
+      const el = document.getElementById(id);
+      return !!el && !el.classList.contains('hidden');
+    });
+    const w = open ? Math.round(document.getElementById(open).offsetWidth) : 0;
+    SB.ipc.win.setSidePanel(w);
+  }
 
   function openPanel(id) {
     PANELS.forEach((p) => {
@@ -18,15 +34,21 @@
     if (id === 'panelExtensions') SB.refreshExtensions();
     if (id === 'panelPC') pc.load('apps');
     SB.ipc.tab.layout();
+    syncWidth();
   }
 
   function closePanels() {
-    PANELS.forEach((p) => document.getElementById(p).classList.add('hidden'));
+    PANELS.forEach((p) => {
+      const el = document.getElementById(p);
+      if (el) el.classList.add('hidden');
+    });
     SB.ipc.tab.layout();
+    syncWidth();
   }
 
   function togglePanel(id) {
     const el = document.getElementById(id);
+    if (!el) return;
     if (el.classList.contains('hidden')) openPanel(id);
     else closePanels();
   }
@@ -112,7 +134,7 @@
     }
     host.innerHTML = SB.downloads.map((d) => {
       const pct = d.total ? Math.min(100, Math.round((d.received / d.total) * 100)) : 0;
-      const state = d.state === 'completed' ? 'Done' : d.state === 'interrupted' ? 'Failed' : `${pct}%`;
+      const state = d.state === 'completed' ? 'Done' : d.state === 'interrupted' ? 'Failed' : pct + '%';
       return `
       <div class="list-item" data-path="${SB.escapeHtml(d.path)}">
         <span class="favicon" style="display:grid;place-items:center">
@@ -149,7 +171,7 @@
       host.innerHTML = `<div class="empty-state">
         No extensions installed yet.<br><br>
         <strong>Load unpacked</strong> installs a folder from your PC.<br>
-        Browse the <strong>Chrome Web Store</strong> and download any <code>.crx</code> — Shine Browser installs it automatically.
+        Browse the <strong>Chrome Web Store</strong> — Shine Browser installs it automatically.
       </div>`;
       return;
     }
@@ -265,9 +287,50 @@
         </div>`).join('');
       host.querySelectorAll('[data-app]').forEach((node) => {
         node.addEventListener('click', async () => {
-          SB.toast(`Opening ${node.dataset.app}…`);
+          SB.toast('Opening ' + node.dataset.app + '…');
           const r = await SB.ipc.pc.launch(node.dataset.app);
           if (!r.ok) SB.toast(r.error || 'Could not open that app');
+        });
+      });
+    },
+  };
+
+  // ---- Browser Control ---------------------------------------------------
+  const browser = {
+    async load() {
+      const host = document.getElementById('bcTabs');
+      const tabs = SB.tabs.map((t) => ({
+        id: t.id,
+        title: t.title || 'New Tab',
+        url: t.url,
+        active: t.id === SB.activeTabId,
+        loading: !!t.loading,
+        incognito: !!t.incognito,
+      }));
+      host.innerHTML = tabs.map((t) => `
+        <div class="list-item" data-tabid="${t.id}" style="cursor:pointer">
+          <span class="favicon" style="display:grid;place-items:center">${t.loading ? '' : ''}</span>
+          <div class="li-main">
+            <div class="li-title">${SB.escapeHtml(t.title)}</div>
+            <div class="li-sub">${SB.escapeHtml(t.url)}</div>
+          </div>
+          <button class="icon-btn sm li-action" data-close="${t.id}" title="Close tab" style="margin-left:auto">
+            <svg class="svg-icon" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
+          </button>
+        </div>`).join('');
+      host.querySelectorAll('[data-tabid]').forEach((node) => {
+        node.addEventListener('click', (e) => {
+          if (e.target.closest('[data-close]')) return;
+          const id = Number(node.dataset.tabid);
+          closePanels();
+          SB.activateTab(id);
+        });
+      });
+      host.querySelectorAll('[data-close]').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          SB.closeTab(Number(btn.dataset.close));
+          browser.load();
         });
       });
     },
@@ -286,7 +349,7 @@
     document.getElementById('openDownloadsFolder').addEventListener('click', () => SB.ipc.app.openDownloads());
     document.getElementById('extLoad').addEventListener('click', async () => {
       const r = await SB.ipc.extensions.load();
-      if (r.ok) { SB.toast(`Installed ${r.name || 'extension'}`); await SB.refreshExtensions(); }
+      if (r.ok) { SB.toast('Installed ' + (r.name || 'extension')); await SB.refreshExtensions(); }
       else if (!r.canceled) SB.toast(r.error || 'Could not load extension');
     });
     document.getElementById('extStore').addEventListener('click', () => {
@@ -294,7 +357,7 @@
       if (tab) SB.loadTab(tab, 'https://chromewebstore.google.com/');
     });
     document.getElementById('importBookmarks').addEventListener('click', () => {
-      SB.toast('Bookmarks import: use Chrome\'s export then drop the file in your Shine Browser profile folder.');
+      SB.toast("Bookmarks import: use Chrome's export then drop the file in your Shine Browser profile folder.");
     });
     document.querySelectorAll('#pcTabs button').forEach((b) => {
       b.addEventListener('click', () => pc.load(b.dataset.pc));
@@ -305,7 +368,64 @@
       if (r.ok) SB.toast('Screenshot saved: ' + r.path);
       else SB.toast(r.error || 'Screenshot failed');
     });
+
+    document.getElementById('pcAskBtn').addEventListener('click', () => {
+      const q = document.getElementById('pcAsk').value.trim();
+      if (!q) return;
+      closePanels();
+      SB.shine.open();
+      SB.ipc.shine.ask('PC Control: ' + q, 'pc-control');
+      SB.toast('Asking Shine to control your PC…');
+    });
+    document.getElementById('pcAsk').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') document.getElementById('pcAskBtn').click();
+    });
+
+    // Browser Control
+    const btnNewTab = document.getElementById('bcNewTab') || document.querySelector('[data-bc="new-tab"]');
+    const btnReload = document.querySelector('[data-bc="reload"]');
+    const btnBack = document.querySelector('[data-bc="back"]');
+    const btnForward = document.querySelector('[data-bc="forward"]');
+    const btnPrivate = document.querySelector('[data-bc="private"]');
+    const btnBookmark = document.querySelector('[data-bc="bookmark"]');
+
+    if (btnNewTab) btnNewTab.addEventListener('click', () => { closePanels(); SB.createTab(); });
+    if (btnReload) btnReload.addEventListener('click', () => { closePanels(); SB.goActive('reload'); });
+    if (btnBack) btnBack.addEventListener('click', () => { closePanels(); SB.goActive('back'); });
+    if (btnForward) btnForward.addEventListener('click', () => { closePanels(); SB.goActive('forward'); });
+    if (btnPrivate) btnPrivate.addEventListener('click', () => { closePanels(); SB.createTab({ incognito: true }); });
+    if (btnBookmark) btnBookmark.addEventListener('click', () => { closePanels(); SB.panels.toggle('panelFavorites'); });
+
+    const bcAsk = document.getElementById('bcAsk');
+    const bcAskBtn = document.getElementById('bcAskBtn');
+    if (bcAskBtn) bcAskBtn.addEventListener('click', () => {
+      const q = bcAsk.value.trim();
+      if (!q) return;
+      closePanels();
+      SB.shine.open();
+      SB.ipc.shine.ask(q, 'explain');
+      SB.toast('Asking Shine to drive the browser…');
+    });
+    if (bcAsk) bcAsk.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') bcAskBtn && bcAskBtn.click();
+    });
+
+    // refresh the tab list whenever tabs change
+    const _createTab = SB.createTab;
+    SB.createTab = function (opts) {
+      const t = _createTab.call(SB, opts);
+      const el = document.getElementById('bcTabs');
+      if (el && !el.classList.contains('hidden')) browser.load();
+      return t;
+    };
+    const _closeTab = SB.closeTab;
+    SB.closeTab = function (id) {
+      const el = document.getElementById('bcTabs');
+      _closeTab.call(SB, id);
+      const el2 = document.getElementById('bcTabs');
+      if (el2 && !el2.classList.contains('hidden')) browser.load();
+    };
   });
 
-  SB.panels = { open: openPanel, close: closePanels, toggle: togglePanel, renderFavorites, renderHistory, renderDownloads, renderExtensions, pc };
+  SB.panels = { open: openPanel, close: closePanels, toggle: togglePanel, renderFavorites, renderHistory, renderDownloads, renderExtensions, pc, browser };
 })();

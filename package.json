@@ -2,7 +2,7 @@
   "name": "shine-browser",
   "productName": "Shine Browser",
   "version": "1.0.0",
-  "description": "Shine Browser — a Safari-styled browser with the Shine AI UI, split-screen Shine, browser control, PC control, extensions, favorites, and full Chrome parity.",
+  "description": "Shine Browser — a Safari-styled browser with the Shine UI, split-screen Shine, browser control, PC control, extensions, favorites, and full Chrome parity.",
   "main": "app/main.js",
   "author": "serpa11",
   "license": "MIT",

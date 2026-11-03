@@ -109,7 +109,7 @@ async function ensureShortcuts(opts = {}) {
   const exe = targetExe();
   const exeDir = path.dirname(exe);
   const icon = `${exe},0`;
-  const desc = 'Shine Browser — browse with Shine AI side by side';
+  const desc = 'Shine Browser — browse with Shine Browser side by side';
 
   const desktopLnk = path.join(app.getPath('desktop'), `${APP_NAME}.lnk`);
   const startDir = path.join(

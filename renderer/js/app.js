@@ -24,6 +24,9 @@
     document.getElementById('btnHistory').addEventListener('click', () => SB.panels.toggle('panelHistory'));
     document.getElementById('btnFavorites').addEventListener('click', () => SB.panels.toggle('panelFavorites'));
     document.getElementById('btnProfile').addEventListener('click', () => SB.menu.openSettings());
+    document.getElementById('btnPC').addEventListener('click', () => SB.panels.toggle('panelPC'));
+    document.getElementById('btnBrowser').addEventListener('click', () => SB.panels.toggle('panelBrowser'));
+    document.getElementById('btnShine').addEventListener('click', () => SB.shine.toggle());
     document.getElementById('btnTabSearch').addEventListener('click', () => {
       const q = prompt('Search tabs');
       if (!q) return;
@@ -103,9 +106,10 @@
       if (e.key === 'F5') { e.preventDefault(); SB.reloadActive(); return; }
       if (e.key === 'Escape') {
         SB.selectionBar.hide();
-        SB.menu.close();
+        SB.menu.closeMenus();
         SB.panels.close();
         SB.menu.closeFind();
+        SB.ipc.overlay && SB.ipc.overlay.hide();
       }
     });
   }
@@ -206,6 +210,30 @@
         case 'downloads:changed':
           SB.refreshDownloads(data);
           break;
+        case 'overlay:action': {
+          SB.onOverlayAction(data);
+          break;
+        }
+        case 'overlay:dismiss': {
+          SB.menu.closeMenus();
+          SB.selectionBar && SB.selectionBar.hide();
+          break;
+        }
+        case 'layout:views': {
+          const p = document.getElementById('shinePanel');
+          if (p) {
+            p.style.right = (data.sideW || 0) + 'px';
+            if (data.open) {
+              p.classList.remove('hidden');
+              p.classList.toggle('max', !!data.max);
+              if (!data.max) p.style.width = (data.shineW || 0) + 'px';
+              else p.style.width = (data.contentW || 0) + 'px';
+            } else {
+              p.classList.add('hidden');
+            }
+          }
+          break;
+        }
         default:
           break;
       }

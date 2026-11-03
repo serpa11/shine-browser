@@ -1,6 +1,6 @@
 # Shine Browser
 
-**A powerful Safari-styled browser with the Shine AI desktop app built right in.**
+**A powerful Safari-styled browser with the Shine desktop app built right in.**
 
 Shine Browser pairs a modern Chromium engine with the exact UI of
 [shineai-9mr.pages.dev](https://shineai-9mr.pages.dev) — open Shine in a

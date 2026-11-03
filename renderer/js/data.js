@@ -21,12 +21,13 @@ SB.ipc = window.shine;
 SB.$ = (sel, root) => (root || document).querySelector(sel);
 SB.$$ = (sel, root) => Array.from((root || document).querySelectorAll(sel));
 
+// Toasts float over the page, so they are drawn by the overlay view.
+// This keeps the public API identical (SB.toast) for every caller.
 SB.toast = function (text, ms) {
-  const el = SB.$('#toast');
-  el.textContent = text;
-  el.classList.remove('hidden');
-  clearTimeout(el.__t);
-  el.__t = setTimeout(() => el.classList.add('hidden'), ms || 3200);
+  if (!SB.ipc.overlay) return;
+  SB.ipc.overlay.show('toast', { mode: 'bottom-center', inset: 30 }, { text: String(text || '') });
+  clearTimeout(SB.__toastTimer);
+  SB.__toastTimer = setTimeout(() => SB.ipc.overlay.hide('toast'), ms || 3200);
 };
 
 SB.show = function (sel) { const e = SB.$(sel); if (e) e.classList.remove('hidden'); };

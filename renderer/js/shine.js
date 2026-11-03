@@ -3,9 +3,13 @@
 // The panel itself is a WebContentsView owned by the main process
 // (loading shineai-9mr.pages.dev). This module only toggles, resizes
 // and talks to it through IPC.
+//
+// Positioning and width now come from the main process via the
+// `layout:views` event — the chrome renderer never sizes the view itself,
+// which is how the panel pushes the page aside instead of being painted
+// over by it.
 // =====================================================================
 (function () {
-  let dragging = false;
   let maximized = false;
 
   function panelEl() { return document.getElementById('shinePanel'); }
@@ -17,10 +21,8 @@
     document.getElementById('btnSplit').classList.add('active');
     document.getElementById('btnShine').classList.add('active');
     SB.panelOpen = true;
-    SB.ipc.shine.setWidth(pct());
-    SB.ipc.tab.layout();
     SB.ipc.settings.set({ panelOpen: true });
-    if (!maximized) p.style.width = Math.round(pct() * 100) + '%';
+    SB.ipc.tab.layout(); // main sends layout:views which positions the DOM panel
   }
 
   function hide() {
@@ -28,56 +30,23 @@
     document.getElementById('btnSplit').classList.remove('active');
     document.getElementById('btnShine').classList.remove('active');
     SB.panelOpen = false;
-    SB.ipc.tab.layout();
     SB.ipc.settings.set({ panelOpen: false });
+    SB.ipc.tab.layout();
   }
 
   function toggle() {
     panelEl().classList.contains('hidden') ? show() : hide();
   }
 
-  function pct() {
-    const w = panelEl().offsetWidth;
-    if (!w) return 0.42;
-    return Math.min(0.75, Math.max(0.25, w / window.innerWidth));
-  }
-
-  function initResize() {
-    const grip = document.getElementById('shineResize');
-    const panel = panelEl();
-
-    grip.addEventListener('mousedown', (e) => {
-      dragging = true;
-      grip.classList.add('active');
-      e.preventDefault();
-    });
-    window.addEventListener('mousemove', (e) => {
-      if (!dragging || maximized) return;
-      const w = window.innerWidth - e.clientX;
-      const min = 320;
-      const max = Math.max(400, window.innerWidth - 380);
-      panel.style.width = Math.max(min, Math.min(max, w)) + 'px';
-      SB.ipc.tab.layout();
-    });
-    window.addEventListener('mouseup', () => {
-      if (!dragging) return;
-      dragging = false;
-      grip.classList.remove('active');
-      SB.ipc.shine.setWidth(pct());
-    });
-  }
-
-  function init() {
-    initResize();
+  async function init() {
+    const s = await SB.ipc.settings.get().catch(() => ({}));
+    maximized = !!s.panelMax;
 
     document.getElementById('shineClose').addEventListener('click', hide);
 
     document.getElementById('shineMax').addEventListener('click', () => {
-      const panel = panelEl();
       maximized = !maximized;
-      panel.classList.toggle('max', maximized);
-      if (maximized) panel.style.width = '';
-      else panel.style.width = Math.round(pct() * 100) + '%';
+      SB.ipc.settings.set({ panelMax: maximized });
       SB.ipc.tab.layout();
     });
 

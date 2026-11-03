@@ -157,11 +157,14 @@
   };
 
   // ---- selection action bar ---------------------------------------------
+  // The pill renders in the overlay view (above the page), not here — this
+  // module only decides what it says and where it sits.
   function onSelection(text) {
     const t = String(text || '').trim();
     if (!t) {
       SB.selection.text = '';
-      SB.selectionBar.hide();
+      SB.selection.rect = null;
+      SB.ipc.overlay.hide('selection-bar');
       return;
     }
     SB.selection.text = t;
@@ -172,6 +175,8 @@
       .then((rect) => SB.selectionBar.show(rect, t, tab))
       .catch(() => SB.selectionBar.show(null, t, tab));
   }
+
+  SB.chromeH = 122;
 
   // ---- tab strip rendering ----------------------------------------------
   function renderTabs() {
@@ -193,7 +198,6 @@
         img.className = 'tab-fav img';
         img.src = tab.favicon;
         img.referrerPolicy = 'no-referrer';
-        img.style.filter = 'grayscale(1)';
         img.onerror = () => { const f = fallback(); if (img.parentNode) img.replaceWith(f); };
         el.appendChild(img);
       } else {
@@ -239,7 +243,10 @@
     const tabsEl = document.getElementById('tabStrip');
     const toolbar = document.getElementById('toolbar');
     if (!title || !tabsEl || !toolbar) return;
+    // The find bar lives inside the toolbar row, so it does not add height —
+    // but it does replace the right-hand controls while it is open.
     const h = title.offsetHeight + tabsEl.offsetHeight + toolbar.offsetHeight;
+    SB.chromeH = h;
     SB.ipc.win.setChromeHeight(h);
     document.documentElement.style.setProperty('--chrome-h', h + 'px');
     SB.ipc.tab.layout();

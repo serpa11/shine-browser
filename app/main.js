@@ -5,7 +5,7 @@
 // renderer is only the chrome (no <webview> tags), which avoids the
 // element/View sync race that breaks navigation.
 // =====================================================================
-const { app, BrowserWindow, ipcMain, session, shell, dialog, Menu, WebContentsView } = require('electron');
+const { app, BrowserWindow, ipcMain, session, shell, dialog, Menu, WebContentsView, protocol } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const store = require('./store');
@@ -40,9 +40,22 @@ let setupWindow = null;
 let shineView = null;
 let shineWidthRatio = 0.42;
 let chromeHeight = 122;
+let sidePanelWidth = 0;         // width of the open side panel (pushes content)
 const views = new Map();        // tabId -> { view, incognito }
 const downloadsList = [];
 let hiddenForSetup = false;
+
+// Floating UI (selection pill, context menu, main menu, toasts) lives in a
+// transparent WebContentsView stacked ABOVE every tab view. Without it the
+// chrome renderer is the bottom layer and the page paints over all of it.
+let overlayView = null;
+let overlayReady = false;
+let overlaySeq = 0;
+let overlayCurrent = null;      // widget name currently on screen
+let overlayLast = null;         // { seq, place, w, h } for repositioning
+let overlayQueue = [];
+
+let wallpaperCache = { path: null, css: null };
 
 const USER_DATA = () => app.getPath('userData');
 const ICON = path.join(__dirname, '..', 'build', 'icon.ico');
@@ -129,10 +142,20 @@ function layoutViews() {
 
   const settings = store.read('settings');
   const panelOpen = !!settings.panelOpen;
-  const panelW = panelOpen
-    ? Math.round(Math.min(Math.max(w * shineWidthRatio, 320), Math.max(380, w - 380)))
-    : 0;
-  const contentW = Math.max(0, w - panelW);
+  const panelMax = !!settings.panelMax;
+  const sideW = sidePanelWidth;
+
+  // The Shine panel and the side panel share the right edge: the side panel
+  // is drawn by the chrome renderer at the far right, Shine sits to its left.
+  let shineW = 0;
+  if (panelOpen) {
+    const avail = Math.max(0, w - sideW);
+    shineW = panelMax
+      ? avail
+      : Math.round(Math.min(Math.max(w * shineWidthRatio, 320), Math.max(380, w - 380)));
+    if (shineW > avail) shineW = avail;
+  }
+  const contentW = Math.max(0, w - sideW - shineW);
 
   for (const [, entry] of views) {
     if (!entry.view || entry.view.webContents.isDestroyed()) continue;
@@ -149,12 +172,161 @@ function layoutViews() {
 
   if (shineView) {
     if (panelOpen) {
-      shineView.setBounds({ x: w - panelW, y: chrome, width: panelW, height: Math.max(0, h - chrome) });
-      shineView.setVisible(true);
+      // The 34px head stays in the chrome renderer so its buttons (close,
+      // maximize, ask) remain clickable — the view starts underneath it.
+      const headH = 34;
+      shineView.setBounds({
+        x: contentW,
+        y: chrome + headH,
+        width: shineW,
+        height: Math.max(0, h - chrome - headH),
+      });
+      try { shineView.setVisible(true); } catch (e) { /* ignore */ }
     } else {
-      shineView.setVisible(false);
+      try { shineView.setVisible(false); } catch (e) { /* ignore */ }
     }
   }
+
+  raiseOverlay();
+  positionOverlay(w, h);
+
+  sendToRenderer('layout:views', {
+    sideW, shineW, contentW, open: panelOpen, max: panelMax, w, h, chrome,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Floating overlay view (selection pill, menus, toasts)
+// ---------------------------------------------------------------------------
+function ensureOverlay() {
+  if (overlayView || !mainWindow || mainWindow.isDestroyed()) return overlayView;
+  overlayView = new WebContentsView({
+    webPreferences: {
+      preload: path.join(__dirname, 'overlay-preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      spellcheck: false,
+    },
+  });
+  try { overlayView.setBackgroundColor('#00000000'); } catch (e) { /* ignore */ }
+  mainWindow.contentView.addChildView(overlayView);
+  try { overlayView.setBounds({ x: 0, y: 0, width: 0, height: 0 }); } catch (e) { /* ignore */ }
+  try { overlayView.setVisible(false); } catch (e) { /* ignore */ }
+
+  const ov = overlayView.webContents;
+  ov.loadFile(path.join(__dirname, '..', 'renderer', 'overlay.html')).catch(() => {});
+  ov.on('did-finish-load', () => {
+    overlayReady = true;
+    const q = overlayQueue;
+    overlayQueue = [];
+    q.forEach((job) => showOverlay(job.widget, job.place, job.data));
+  });
+  ov.ipc.on('overlay:measured', (e, m) => onOverlayMeasured(m || {}));
+  ov.ipc.on('overlay:action', (e, p) => {
+    sendToRenderer('overlay:action', p || {});
+    refocusActiveTab();
+  });
+  ov.ipc.on('overlay:dismiss', () => {
+    hideOverlay();
+    sendToRenderer('overlay:dismiss', {});
+  });
+  ov.setWindowOpenHandler(() => ({ action: 'deny' }));
+  return overlayView;
+}
+
+// Child views stack in creation order, so a freshly created tab would cover
+// the overlay. Re-adding it moves it back to the top.
+function raiseOverlay() {
+  if (!overlayView || !mainWindow || mainWindow.isDestroyed()) return;
+  try { mainWindow.contentView.addChildView(overlayView); } catch (e) { /* ignore */ }
+}
+
+function refocusActiveTab() {
+  for (const [, entry] of views) {
+    if (entry.active && entry.view && !entry.view.webContents.isDestroyed()) {
+      try { entry.view.webContents.focus(); } catch (e) { /* ignore */ }
+      return;
+    }
+  }
+}
+
+function showOverlay(widget, place, data) {
+  if (!widget) return;
+  if (!overlayReady) {
+    overlayQueue.push({ widget, place, data });
+    ensureOverlay();
+    return;
+  }
+  ensureOverlay();
+  overlaySeq += 1;
+  overlayCurrent = widget;
+  overlayLast = { seq: overlaySeq, place: place || {}, w: 0, h: 0 };
+  try { overlayView.setVisible(true); } catch (e) { /* ignore */ }
+  raiseOverlay();
+  overlayView.webContents.send('overlay:render', {
+    seq: overlaySeq, widget, place: place || {}, data: data || {},
+  });
+}
+
+function onOverlayMeasured(m) {
+  if (!overlayLast || m.seq !== overlayLast.seq) return;   // stale measurement
+  overlayLast.w = Math.max(0, Number(m.w) || 0);
+  overlayLast.h = Math.max(0, Number(m.h) || 0);
+  positionOverlay();
+}
+
+function hideOverlay(widget) {
+  if (widget && overlayCurrent !== widget) return;
+  overlayCurrent = null;
+  overlayLast = null;
+  if (!overlayView) return;
+  try { overlayView.setBounds({ x: 0, y: 0, width: 0, height: 0 }); } catch (e) { /* ignore */ }
+  try { overlayView.setVisible(false); } catch (e) { /* ignore */ }
+}
+
+const OVERLAY_PAD = 14;
+
+function positionOverlay(winW, winH) {
+  if (!overlayView || !overlayLast || !overlayReady) return;
+  const size = mainWindow && !mainWindow.isDestroyed()
+    ? mainWindow.getContentSize()
+    : [winW || 0, winH || 0];
+  const w = size[0];
+  const h = size[1];
+  const place = overlayLast.place || {};
+  const gw = overlayLast.w + OVERLAY_PAD * 2;
+  const gh = overlayLast.h + OVERLAY_PAD * 2;
+
+  // If the pill would collide with the browser chrome, flip it below the text.
+  if ((place.mode || 'xy') === 'cx-above' && place.alt && (place.y - gh) < (chromeHeight + 6)) {
+    return positionOverlayAt(place.alt, gw, gh, w, h);
+  }
+  return positionOverlayAt(place, gw, gh, w, h);
+}
+
+function positionOverlayAt(place, gw, gh, winW, winH) {
+  const mode = place.mode || 'xy';
+  let vx = 0;
+  let vy = 0;
+  switch (mode) {
+    case 'cx': vx = place.cx - gw / 2; vy = place.y; break;
+    case 'cx-above': vx = place.cx - gw / 2; vy = place.y - gh; break;
+    case 'r': vx = place.r - gw; vy = place.y; break;
+    case 'bottom-center': vx = (winW - gw) / 2; vy = winH - gh - (place.inset || 28); break;
+    case 'xy':
+    default:
+      vx = place.x || 0;
+      vy = place.y || 0;
+      break;
+  }
+  const minY = (mode === 'cx' || mode === 'cx-above') ? chromeHeight + 6 : 4;
+  vx = Math.max(4, Math.min(winW - gw - 4, vx));
+  vy = Math.max(minY, Math.min(winH - gh - 4, vy));
+  try {
+    overlayView.setBounds({ x: Math.round(vx), y: Math.round(vy), width: Math.round(gw), height: Math.round(gh) });
+    overlayView.webContents.send('overlay:place', { x: OVERLAY_PAD, y: OVERLAY_PAD });
+  } catch (e) { /* ignore */ }
 }
 
 // ---------------------------------------------------------------------------
@@ -169,10 +341,18 @@ function hookWebContents(wc, tabId, incognito) {
   wc.on('ipc-message', (event, channel, payload) => {
     if (channel === 'shine-selection') {
       sendToRenderer('tab:selection', { tabId, text: String(payload || '').trim() });
+    } else if (channel === 'shine-ui-dismiss') {
+      // The user interacted with the page: floating UI must get out of the way.
+      hideOverlay();
+      sendToRenderer('overlay:dismiss', {});
     }
   });
   wc.on('did-stop-loading', () => {
     sendToRenderer('tab:loading', { tabId, loading: false });
+  });
+  wc.on('did-fail-load', (e, errorCode, errorDesc, validatedURL) => {
+    sendToRenderer('tab:fail', { tabId, code: errorCode, desc: errorDesc, url: validatedURL });
+    console.error('[shine] tab ' + tabId + ' failed to load ' + validatedURL + ': ' + errorCode + ' ' + errorDesc);
   });
   wc.on('page-title-updated', (e, title) => {
     const entry = views.get(tabId);
@@ -188,7 +368,7 @@ function hookWebContents(wc, tabId, incognito) {
 
   const onNav = (url) => {
     const entry = views.get(tabId);
-    if (entry && !/^data:text\/html/i.test(url)) entry.isNewTab = false;
+    if (entry && !/^shine:\/\//i.test(url) && !/^data:text\/html/i.test(url)) entry.isNewTab = false;
     const isNew = !!(entry && entry.isNewTab);
     sendToRenderer('tab:navigate', { tabId, url: isNew ? 'shine://newtab' : url });
     if (!isNew) recordHistory(wc, url);
@@ -253,7 +433,8 @@ function hookWebContents(wc, tabId, incognito) {
     const alt = input.alt;
     let name = null;
 
-    if (k === 'F5') name = 'reload';
+    if (k === 'Escape') name = 'escape';
+    else if (k === 'F5') name = 'reload';
     else if (k === 'F12') name = 'devtools';
     else if (alt && !ctrl && !shift) {
       if (k === 'ArrowLeft') name = 'back';
@@ -368,9 +549,9 @@ function loadURL(tabId, url) {
   const target = normalizeUrl(url);
   if (target.startsWith('shine://newtab')) {
     // Internal new-tab page: remember it so the chrome shows "New Tab"
-    // instead of the underlying data: URL.
+    // instead of the underlying shine:// URL.
     entry.isNewTab = true;
-    wc.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(newTabPageHTML(!!entry.incognito))).catch(() => {});
+    wc.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(newTabPageHTML(entry.incognito))).catch(() => {});
     return;
   }
   entry.isNewTab = false;
@@ -568,73 +749,123 @@ function searchUrl(query) {
 }
 
 // ---------------------------------------------------------------------------
-// New tab page
+// New tab page — search bar + wallpaper button, nothing else.
+// Served from shine://newtab so it has a real origin for IPC and images.
 // ---------------------------------------------------------------------------
+function wallpaperFile() {
+  const p = store.read('settings').wallpaper;
+  if (!p || !fs.existsSync(p)) return null;
+  return p;
+}
+
+// A base64 data URL the new tab page paints straight into its background-image.
+// Baked into the data: page by the main process (no IPC from the page needed).
+function wallpaperDataUrl() {
+  const p = wallpaperFile();
+  if (!p) return null;
+  try {
+    const ext = path.extname(p).toLowerCase();
+    const mime = ext === '.png' ? 'image/png'
+      : ext === '.webp' ? 'image/webp'
+        : ext === '.gif' ? 'image/gif'
+          : ext === '.bmp' ? 'image/bmp'
+            : 'image/jpeg';
+    const b64 = fs.readFileSync(p).toString('base64');
+    return 'data:' + mime + ';base64,' + b64;
+  } catch (e) { return null; }
+}
+
 function newTabPageHTML(incognito) {
-  const tiles = [
-    ['Google', 'https://www.google.com'],
-    ['YouTube', 'https://www.youtube.com'],
-    ['X', 'https://x.com'],
-    ['Reddit', 'https://www.reddit.com'],
-    ['GitHub', 'https://github.com'],
-    ['Wikipedia', 'https://en.wikipedia.org'],
-    ['Netflix', 'https://www.netflix.com'],
-    ['Amazon', 'https://www.amazon.com'],
-    ['Gmail', 'https://mail.google.com'],
-    ['Maps', 'https://maps.google.com'],
-    ['Twitch', 'https://www.twitch.tv'],
-    ['Shine AI', 'https://shineai-9mr.pages.dev'],
-  ];
+  const wp = incognito ? null : wallpaperDataUrl();
   return `<!DOCTYPE html><html><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' shine: data: blob:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' shine: data: https:; connect-src 'self' shine: https:">
 <style>
 :root{color-scheme:dark}
 *{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
 body{background:#000;color:#fff;font-family:Inter,-apple-system,"Segoe UI",Roboto,sans-serif;
-min-height:100vh;display:flex;flex-direction:column;align-items:center;padding-top:13vh}
-.logo{width:120px;height:auto;margin-bottom:26px;display:block}
-h1{font-size:22px;font-weight:300;letter-spacing:-.02em;margin-bottom:30px;color:#fff;opacity:.85}
-.search{width:min(560px,86vw);display:flex;align-items:center;gap:12px;padding:14px 20px;
-border:1px solid rgba(255,255,255,.14);border-radius:14px;background:rgba(255,255,255,.04);
-transition:border-color .2s}
-.search:focus-within{border-color:rgba(255,255,255,.35)}
-.search input{flex:1;background:transparent;border:none;outline:none;color:#fff;font:inherit;font-size:15px}
-.search input::placeholder{color:rgba(255,255,255,.35)}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(108px,1fr));gap:12px;
-width:min(680px,90vw);margin-top:42px}
-.tile{display:flex;flex-direction:column;align-items:center;gap:10px;padding:18px 10px;
-border:1px solid rgba(255,255,255,.08);border-radius:14px;background:rgba(255,255,255,.03);
-color:rgba(255,255,255,.7);text-decoration:none;font-size:12px;cursor:pointer;
-transition:all .25s cubic-bezier(.16,1,.3,1)}
-.tile:hover{color:#fff;background:rgba(255,255,255,.08);transform:translateY(-3px);
-border-color:rgba(255,255,255,.2)}
-.avatar{width:34px;height:34px;border-radius:50%;border:1px solid rgba(255,255,255,.14);
-display:grid;place-items:center;font-size:14px;font-weight:400;color:#fff}
-footer{margin-top:auto;padding:26px;color:rgba(255,255,255,.3);font-size:11.5px}
-</style></head><body>
-<svg class="logo" viewBox="0 0 240 120"><text x="120" y="66" text-anchor="middle" fill="#fff"
- font-family="Inter,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="52" font-weight="300"
- letter-spacing="-1">Shine</text><text x="176" y="96" text-anchor="middle" fill="#fff"
- font-family="Inter,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="20" font-weight="300">Browser</text></svg>
-<h1>${incognito ? 'Private browsing' : 'New Tab'}</h1>
-<div class="search"><input id="q" placeholder="Search or enter website" autofocus /></div>
-<div class="grid" id="grid"></div>
-<footer>${incognito ? 'History is not saved in private tabs.' : 'Shine Browser'}</footer>
+ -webkit-font-smoothing:antialiased;display:flex;align-items:center;justify-content:center;
+ background-position:center;background-size:cover;background-repeat:no-repeat;position:relative;overflow:hidden}
+body.wp::before{content:"";position:absolute;inset:0;background:rgba(0,0,0,.42)}
+.wrap{position:relative;z-index:1;width:min(600px,88vw);display:flex;flex-direction:column;gap:14px}
+.search{display:flex;align-items:center;gap:12px;padding:15px 18px;
+ border:1px solid rgba(255,255,255,.15);border-radius:15px;background:rgba(10,10,10,.72);
+ backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);transition:border-color .2s ease}
+.search:focus-within{border-color:rgba(255,255,255,.4)}
+.search svg{width:16px;height:16px;flex:none;fill:none;stroke:rgba(255,255,255,.4);
+ stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
+.search input{flex:1;min-width:0;background:transparent;border:none;outline:none;
+ color:#fff;font:inherit;font-size:15px}
+.search input::placeholder{color:rgba(255,255,255,.42)}
+.search .go{border:none;background:transparent;color:rgba(255,255,255,.55);cursor:pointer;
+ font:inherit;font-size:12.5px;padding:7px 12px;border-radius:9px;transition:all .15s ease;white-space:nowrap}
+.search .go:hover{color:#fff;background:rgba(255,255,255,.1)}
+.wp-row{display:flex;justify-content:center;gap:8px;flex-wrap:wrap}
+.wp-btn{display:flex;align-items:center;gap:7px;border:1px solid rgba(255,255,255,.12);
+ background:rgba(10,10,10,.6);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+ color:rgba(255,255,255,.5);font:inherit;font-size:12px;padding:8px 14px;border-radius:10px;
+ cursor:pointer;transition:all .18s ease}
+.wp-btn:hover{color:#fff;border-color:rgba(255,255,255,.3);background:rgba(255,255,255,.07)}
+.wp-btn svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.7;
+ stroke-linecap:round;stroke-linejoin:round}
+.wp-btn.on{color:#fff;border-color:rgba(255,255,255,.28)}
+</style></head><body${wp ? ' class="wp" style="background-image: url("' + wp + '")' : ''}>
+<div class="wrap">
+  <div class="search">
+    <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><line x1="16" y1="16" x2="21" y2="21"/></svg>
+    <input id="q" placeholder="Search or enter website" autofocus autocomplete="off" spellcheck="false" />
+    <button class="go" id="go">Search</button>
+  </div>
+  <div class="wp-row">
+    <button class="wp-btn${wp ? ' on' : ''}" id="wp">
+      <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2.5"/><circle cx="8.5" cy="10" r="1.6"/><path d="M4 17l5-4.5 4 3.5 3-2.5 4 3.5"/></svg>
+      <span id="wpLabel">${wp ? 'Change wallpaper' : 'Add wallpaper'}</span>
+    </button>
+    <button class="wp-btn${wp ? '' : ' off'}" id="wpClear"${wp ? '' : ' style="display:none"'}>
+      <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg><span>Remove</span>
+    </button>
+  </div>
+</div>
 <script>
-var tiles=${JSON.stringify(tiles)};
-document.getElementById('grid').innerHTML=tiles.map(function(t){
-  return '<a class="tile" href="'+t[1]+'"><div class="avatar">'+t[0].charAt(0)+'</div>'+t[0]+'</a>';
-}).join('');
-Array.prototype.forEach.call(document.querySelectorAll('.tile'),function(a){
-  a.addEventListener('click',function(e){e.preventDefault();location.href=a.href;});
-});
-var q=document.getElementById('q');
-q.addEventListener('keydown',function(e){
-  if(e.key!=='Enter')return;
-  var v=q.value.trim();if(!v)return;
-  if(/^[a-z]+:\\/\\//i.test(v)||(/^[\\w-]+(\\.[\\w-]+)+(\\/.*)?$/i.test(v)&&v.indexOf(' ')<0))
-    location.href=/^[a-z]+:\\/\\//i.test(v)?v:'https://'+v;
-  else location.href='https://www.google.com/search?q='+encodeURIComponent(v);
-});
+var api = window.__shineNT || null;
+var q = document.getElementById('q');
+var wpBtn = document.getElementById('wp');
+var wpLabel = document.getElementById('wpLabel');
+var wpClear = document.getElementById('wpClear');
+
+function go() {
+  var v = q.value.trim();
+  if (!v) return;
+  if (/^[a-z][a-z0-9+.-]*:\\/\\//i.test(v)) location.href = v;
+  else if (/^[\\w-]+(\\.[\\w-]+)+(:\\d+)?(\\/.*)?$/.test(v) && v.indexOf(' ') < 0) location.href = 'https://' + v;
+  else location.href = 'https://www.google.com/search?q=' + encodeURIComponent(v);
+}
+document.getElementById('go').addEventListener('click', go);
+q.addEventListener('keydown', function (e) { if (e.key === 'Enter') go(); });
+
+if (api) {
+  api.getWallpaper().then(function (css) {
+    if (css) {
+      document.body.style.backgroundImage = css;
+      document.body.classList.add('wp');
+      wpLabel.textContent = 'Change wallpaper';
+      wpBtn.classList.add('on');
+      wpClear.style.display = '';
+    } else {
+      document.body.style.backgroundImage = '';
+      document.body.classList.remove('wp');
+    }
+  }).catch(function () {});
+
+  wpBtn.addEventListener('click', function () {
+    if (!api.pickWallpaper) return;
+    api.pickWallpaper().then(function (ok) { if (ok) api.reload(); }).catch(function () {});
+  });
+  wpClear.addEventListener('click', function () {
+    if (!api.clearWallpaper) return;
+    api.clearWallpaper().then(function () { api.reload(); }).catch(function () {});
+  });
+}
 </script></body></html>`;
 }
 
@@ -655,6 +886,38 @@ function setupIpc() {
       chromeHeight = h;
       layoutViews();
     }
+  });
+
+  // --- new tab page wallpaper ---
+  ipcMain.handle('nt:get-wallpaper', () => wallpaperDataUrl());
+  ipcMain.handle('nt:pick-wallpaper', async (e) => {
+    const win = BrowserWindow.fromWebContents(e.sender) || mainWindow;
+    const r = await dialog.showOpenDialog(win, {
+      title: 'Choose a wallpaper',
+      properties: ['openFile'],
+      filters: [{ name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp'] }],
+    });
+    if (r.canceled || !r.filePaths || !r.filePaths[0]) return false;
+    const src = r.filePaths[0];
+    const dest = path.join(USER_DATA(), 'wallpaper' + (path.extname(src).toLowerCase() || '.png'));
+    try {
+      fs.copyFileSync(src, dest);
+    } catch (err) {
+      return false;
+    }
+    const s = store.read('settings');
+    s.wallpaper = dest;
+    store.write('settings', s);
+    return true;
+  });
+  ipcMain.handle('nt:clear-wallpaper', () => {
+    const s = store.read('settings');
+    if (s.wallpaper) {
+      try { if (fs.existsSync(s.wallpaper)) fs.unlinkSync(s.wallpaper); } catch (e) { /* ignore */ }
+    }
+    delete s.wallpaper;
+    store.write('settings', s);
+    return true;
   });
 
   // --- tabs (all managed here) ---
@@ -787,6 +1050,12 @@ function setupIpc() {
       layoutViews();
     }
   });
+  ipcMain.on('shine:set-max', (e, max) => {
+    const s = store.read('settings');
+    s.panelMax = !!max;
+    store.write('settings', s);
+    layoutViews();
+  });
   ipcMain.on('shine:ask', (e, { text, mode }) => askShine(text, mode || 'selection'));
   ipcMain.on('shine:send', (e, { text }) => {
     if (shineView && !shineView.webContents.isDestroyed()) {
@@ -838,6 +1107,21 @@ function setupIpc() {
   ipcMain.handle('pc:open-path', (e, p) => {
     if (p && fs.existsSync(p)) { shell.openPath(p); return { ok: true }; }
     return { ok: false, error: 'Not found' };
+  });
+
+  // --- floating overlay (selection pill, menus, toasts) ---
+  ipcMain.on('overlay:show', (e, spec) => {
+    if (!spec) return;
+    showOverlay(spec.widget, spec.place, spec.data);
+  });
+  ipcMain.on('overlay:hide', (e, widget) => hideOverlay(widget));
+
+  // --- side panel width: the page must never paint over a panel ---
+  ipcMain.on('win:set-side-panel', (e, w) => {
+    const width = Math.max(0, Math.round(Number(w) || 0));
+    if (width === sidePanelWidth) return;
+    sidePanelWidth = width;
+    layoutViews();
   });
 
   // --- settings / app ---
@@ -924,6 +1208,79 @@ function finishSetup() {
 // ---------------------------------------------------------------------------
 app.whenReady().then(() => {
   Menu.setApplicationMenu(null);
+
+  // Internal pages: shine://newtab/ is the start page, shine://wallpaper is
+  // the user's chosen background image. Wallpaper pick/clear happen through
+  // shine:// navigations so the new-tab page never needs IPC from a
+  // sandboxed preload (contextBridge is unreliable there).
+  protocol.handle('shine', async (req) => {
+    console.log('[shine] handle request:', req.url);
+    const u = new URL(req.url);
+    const win = BrowserWindow.fromWebContents(req.webContents) || mainWindow;
+
+    if (u.hostname === 'wallpaper') {
+      // serve the image file
+      const file = wallpaperFile();
+      if (!file) return new Response('Not set', { status: 404 });
+      try {
+        const stat = fs.statSync(file);
+        const ext = path.extname(file).toLowerCase();
+        const type = ext === '.png' ? 'image/png'
+          : ext === '.webp' ? 'image/webp'
+            : ext === '.gif' ? 'image/gif'
+              : ext === '.bmp' ? 'image/bmp'
+                : 'image/jpeg';
+        return new Response(fs.readFileSync(file), {
+          headers: { 'Content-Type': type, 'Content-Length': String(stat.size), 'Cache-Control': 'no-cache' },
+        });
+      } catch (e) {
+        return new Response('Not available', { status: 404 });
+      }
+    }
+
+    if (u.pathname === '/pick-wallpaper' || u.hostname === 'pick-wallpaper') {
+      try {
+        const r = await dialog.showOpenDialog(win, {
+          title: 'Choose a wallpaper',
+          properties: ['openFile'],
+          filters: [{ name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp'] }],
+        });
+        if (!r.canceled && r.filePaths && r.filePaths[0]) {
+          const src = r.filePaths[0];
+          const dest = path.join(USER_DATA(), 'wallpaper' + (path.extname(src).toLowerCase() || '.png'));
+          try { fs.copyFileSync(src, dest); } catch (e) { /* ignore */ }
+          const s = store.read('settings');
+          s.wallpaper = dest;
+          store.write('settings', s);
+          wallpaperCache = { path: null, css: null };
+        }
+      } catch (e) { /* ignore */ }
+      return new Response(
+        '<!DOCTYPE html><html><head><meta http-equiv="refresh" content="0; url=shine://newtab/"></head></html>',
+        { headers: { 'Content-Type': 'text/html; charset=utf-8' } },
+      );
+    }
+
+    if (u.pathname === '/wallpaper/clear' || u.hostname === 'wallpaper-clear') {
+      const s = store.read('settings');
+      if (s.wallpaper) {
+        try { if (fs.existsSync(s.wallpaper)) fs.unlinkSync(s.wallpaper); } catch (e) { /* ignore */ }
+      }
+      delete s.wallpaper;
+      store.write('settings', s);
+      wallpaperCache = { path: null, css: null };
+      return new Response(
+        '<!DOCTYPE html><html><head><meta http-equiv="refresh" content="0; url=shine://newtab/"></head></html>',
+        { headers: { 'Content-Type': 'text/html; charset=utf-8' } },
+      );
+    }
+
+    // everything else under shine:// is the new tab page
+    return new Response('<!DOCTYPE html><html><head><title>NT</title></head><body><h1>New Tab Static</h1><p id="x">static works</p><script>document.getElementById("x").textContent="loaded ok";</script></body></html>', {
+      headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' },
+    });
+  });
+
   setupIpc();
   extensions.init(browserSession());
   downloads.init(browserSession(), downloadsList, () => sendToRenderer('downloads:changed', downloadsList));

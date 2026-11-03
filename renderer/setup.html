@@ -6,12 +6,9 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
   <style>
-    html, body { overflow: hidden; }
-    body { display: flex; align-items: center; justify-content: center; height: 100vh; }
-    .setup-shell { width: min(500px, 92vw); }
-
-    .setup-mark { display: flex; justify-content: center; margin-bottom: 22px; }
-    .setup-mark svg { width: 150px; height: auto; }
+    html, body { overflow-y: auto; height: 100%; }
+    body { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 24px; }
+    .setup-shell { width: min(500px, 92vw); max-height: 100%; }
 
     .setup-title { font-size: 23px; font-weight: 300; text-align: center; letter-spacing: -.02em; }
     .setup-sub { text-align: center; color: var(--ink-50); font-size: 13px; margin: 8px 0 26px; line-height: 1.6; }
@@ -64,17 +61,6 @@
 </head>
 <body>
   <div class="setup-shell">
-    <div class="setup-mark">
-      <svg viewBox="0 0 240 120">
-        <text x="120" y="66" text-anchor="middle" fill="#fff"
-              font-family="Inter,-apple-system,'Segoe UI',Roboto,sans-serif"
-              font-size="54" font-weight="300" letter-spacing="-1">Shine</text>
-        <text x="182" y="98" text-anchor="middle" fill="#fff"
-              font-family="Inter,-apple-system,'Segoe UI',Roboto,sans-serif"
-              font-size="21" font-weight="300">Browser</text>
-      </svg>
-    </div>
-
     <h1 class="setup-title">Install Shine Browser</h1>
     <p class="setup-sub">Choose what you'd like, then press Install.</p>
 
@@ -157,7 +143,8 @@
       for (const key of runOrder) {
         await new Promise((r) => setTimeout(r, 420));
         done.add(key);
-        const next = runOrder[runOrder.length - 1] === key ? null : runOrder[runOrder.length === runOrder.indexOf(key) + 1 ? runOrder.length - 1 : runOrder.indexOf(key) + 1];
+        const idx = runOrder.indexOf(key);
+        const next = idx + 1 < runOrder.length ? runOrder[idx + 1] : null;
         renderSteps(order, done, next);
       }
       await new Promise((r) => setTimeout(r, 300));
@@ -183,7 +170,7 @@
       }
     }
 
-    btnInstall.addEventListener('click', start);
+    btnInstall.onclick = start;
     btnSkip.addEventListener('click', () => {
       window.shineSetup.finish();
     });

@@ -1,5 +1,10 @@
 // =====================================================================
 // Shine Browser — main menu, context menu, find bar
+//
+// The two menus are rendered by the overlay view (a transparent child
+// view stacked above the page) because anything drawn by this renderer is
+// underneath the page views. This module still owns the item lists and
+// the action handlers; it just hands the markup to the overlay.
 // =====================================================================
 (function () {
   const ACTIONS = {
@@ -13,6 +18,7 @@
     'extensions': () => SB.panels.toggle('panelExtensions'),
     'web-store': () => { const t = SB.activeTab(); if (t) SB.loadTab(t, 'https://chromewebstore.google.com/'); },
     'pc-control': () => SB.panels.toggle('panelPC'),
+    'browser-control': () => SB.panels.toggle('panelBrowser'),
     'shine': () => SB.shine.toggle(),
     'zoom-in': () => SB.goActive('zoom-in'),
     'zoom-out': () => SB.goActive('zoom-out'),
@@ -23,38 +29,85 @@
     'task-manager': () => SB.goActive('task-manager'),
     'screenshot': () => SB.goActive('screenshot'),
     'devtools': () => SB.goActive('devtools'),
-    'settings': () => openSettings(),
-    'about': () => openSettings(),
+    'settings': () => SB.ipc.overlay.show('settings', { mode: 'xy', x: 0, y: 0 }, {}),
+    'about': () => SB.ipc.overlay.show('settings', { mode: 'xy', x: 0, y: 0 }, {}),
     'quit': () => window.close(),
   };
 
+  const MAIN_MENU_ITEMS = [
+    { act: 'new-tab', label: 'New tab', kbd: 'Ctrl+T' },
+    { act: 'new-window', label: 'New window', kbd: 'Ctrl+N' },
+    { act: 'new-private', label: 'New private window', kbd: 'Ctrl+Shift+N' },
+    { act: 'sep' },
+    { act: 'history', label: 'History', kbd: 'Ctrl+H' },
+    { act: 'downloads', label: 'Downloads', kbd: 'Ctrl+J' },
+    { act: 'favorites', label: 'Favorites', kbd: 'Ctrl+B' },
+    { act: 'reading-list', label: 'Reading list' },
+    { act: 'sep' },
+    { act: 'extensions', label: 'Extensions' },
+    { act: 'web-store', label: 'Chrome Web Store' },
+    { act: 'pc-control', label: 'PC Control' },
+    { act: 'browser-control', label: 'Browser Control' },
+    { act: 'shine', label: 'Shine split screen', kbd: 'Ctrl+Shift+S' },
+    { act: 'sep' },
+    { act: 'zoom-in', label: 'Zoom in', kbd: 'Ctrl++' },
+    { act: 'zoom-out', label: 'Zoom out', kbd: 'Ctrl+-' },
+    { act: 'zoom-reset', label: 'Reset zoom', kbd: 'Ctrl+0' },
+    { act: 'sep' },
+    { act: 'print', label: 'Print', kbd: 'Ctrl+P' },
+    { act: 'find', label: 'Find on page', kbd: 'Ctrl+F' },
+    { act: 'cast', label: 'Cast' },
+    { act: 'task-manager', label: 'Task manager' },
+    { act: 'screenshot', label: 'Screenshot' },
+    { act: 'devtools', label: 'Developer tools', kbd: 'F12' },
+    { act: 'sep' },
+    { act: 'settings', label: 'Settings' },
+    { act: 'about', label: 'About Shine Browser' },
+    { act: 'quit', label: 'Quit', kbd: 'Ctrl+Q' },
+  ];
+
+  let menuOpen = false;
+
   function openMenu(anchor) {
-    const menu = document.getElementById('mainMenu');
-    menu.classList.remove('hidden');
     const r = anchor.getBoundingClientRect();
-    menu.style.top = (r.bottom + 6) + 'px';
-    const w = menu.offsetWidth;
-    menu.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, r.right - w)) + 'px';
+    menuOpen = true;
+    // right-aligned under the anchor; the overlay clamps to the window
+    SB.ipc.overlay.show('main-menu',
+      { mode: 'r', r: r.right, y: r.bottom + 6 },
+      { items: MAIN_MENU_ITEMS });
   }
 
   function closeMenus() {
-    document.getElementById('mainMenu').classList.add('hidden');
-    document.getElementById('contextMenu').classList.add('hidden');
-    document.getElementById('omniSuggestions').classList.add('hidden');
+    if (menuOpen) {
+      menuOpen = false;
+      SB.ipc.overlay.hide('main-menu');
+    }
+    SB.ipc.overlay.hide('context-menu');
+    SB.ipc.overlay.hide('omni-suggestions');
+    SB.ipc.overlay.hide('selection-bar');
   }
+  SB.closeMenus = closeMenus;
 
   // ---- find bar ----------------------------------------------------------
+  // Lives in the toolbar strip, so it is never covered by the page.
   function openFind() {
     const bar = document.getElementById('findBar');
+    if (!bar) return;
     bar.classList.remove('hidden');
+    document.body.classList.add('finding');
     const inp = document.getElementById('findInput');
     inp.focus();
     inp.select();
+    SB.syncChromeHeight();
   }
 
   function closeFind() {
-    document.getElementById('findBar').classList.add('hidden');
+    const bar = document.getElementById('findBar');
+    if (!bar || bar.classList.contains('hidden')) return;
+    bar.classList.add('hidden');
+    document.body.classList.remove('finding');
     SB.goActive('find-stop');
+    SB.syncChromeHeight();
   }
 
   function runFind(step) {
@@ -65,81 +118,14 @@
     document.getElementById('findCount').textContent = step === 'prev' ? '↑ prev' : '↓ next';
   }
 
-  // ---- settings ----------------------------------------------------------
-  async function openSettings() {
-    const w = document.getElementById('settingsWindow');
-    w.classList.remove('hidden');
-    const s = await SB.ipc.settings.get();
-    SB.settings = s;
-    document.getElementById('setSearchEngine').value = s.searchEngine || 'google';
-    document.getElementById('setPanelWidth').value = Math.round((s.panelWidth || 0.42) * 100);
-    document.getElementById('setPanelOpen').checked = !!s.panelOpen;
-    const info = await SB.ipc.app.info();
-    const st = await SB.ipc.setup.status();
-    document.getElementById('aboutBox').innerHTML = `
-      <strong>Shine Browser</strong> ${SB.escapeHtml(info.version)}<br>
-      Chromium engine <strong>${SB.escapeHtml(info.chrome)}</strong> — updated for 2026<br>
-      Electron ${SB.escapeHtml(info.electron)} · Node ${SB.escapeHtml(info.node)}<br>
-      ${info.platform} ${info.arch}<br>
-      Profile data: ${SB.escapeHtml(info.userData)}<br>
-      Shortcuts installed: <strong>${st.desktopShortcut ? 'Desktop ✓' : 'Desktop ✗'}</strong>
-      · <strong>${st.startMenuShortcut ? 'Start menu ✓' : 'Start menu ✗'}</strong>`;
-  }
-
   document.addEventListener('DOMContentLoaded', () => {
-    // main menu
     document.getElementById('btnMenu').addEventListener('click', (e) => {
       e.stopPropagation();
-      const m = document.getElementById('mainMenu');
-      if (m.classList.contains('hidden')) openMenu(e.currentTarget);
-      else m.classList.add('hidden');
-    });
-    document.querySelectorAll('#mainMenu button').forEach((b) => {
-      b.addEventListener('click', () => {
-        closeMenus();
-        const fn = ACTIONS[b.dataset.act];
-        if (fn) fn();
-      });
+      if (menuOpen) { closeMenus(); return; }
+      openMenu(e.currentTarget);
     });
 
-    // settings window
-    document.getElementById('closeSettings').addEventListener('click', () => {
-      document.getElementById('settingsWindow').classList.add('hidden');
-    });
-    document.getElementById('setSearchEngine').addEventListener('change', async (e) => {
-      await SB.ipc.settings.set({ searchEngine: e.target.value });
-      SB.settings.searchEngine = e.target.value;
-      SB.toast('Search engine updated');
-    });
-    document.getElementById('setPanelWidth').addEventListener('input', (e) => {
-      const r = Number(e.target.value) / 100;
-      SB.ipc.shine.setWidth(r);
-      const p = document.getElementById('shinePanel');
-      p.style.width = Math.round(r * 100) + '%';
-    });
-    document.getElementById('setPanelOpen').addEventListener('change', async (e) => {
-      await SB.ipc.settings.set({ panelOpen: e.target.checked });
-      if (e.target.checked) SB.shine.show(); else SB.shine.hide();
-    });
-    document.getElementById('setStartup').addEventListener('change', async (e) => {
-      await SB.ipc.settings.set({ startup: e.target.value });
-    });
-    document.getElementById('changeDl').addEventListener('click', () => {
-      SB.toast('Downloads folder is set in Settings → Downloads.');
-    });
-    document.getElementById('renameProfile').addEventListener('click', async () => {
-      const name = prompt('Profile name', document.getElementById('profileName').textContent);
-      if (name) {
-        document.getElementById('profileName').textContent = name;
-        await SB.ipc.settings.set({ profileName: name });
-      }
-    });
-    document.getElementById('reRunSetup').addEventListener('click', () => {
-      document.getElementById('settingsWindow').classList.add('hidden');
-      if (SB.ipc.setup && SB.ipc.setup.open) SB.ipc.setup.open();
-    });
-
-    // find bar
+    // find bar (in the chrome strip)
     document.getElementById('findClose').addEventListener('click', closeFind);
     document.getElementById('findNext').addEventListener('click', () => runFind('next'));
     document.getElementById('findPrev').addEventListener('click', () => runFind('prev'));
@@ -148,31 +134,25 @@
       if (e.key === 'Escape') closeFind();
     });
 
-    // global click-away
+    // global click-away: clicking the chrome closes floating menus
     document.addEventListener('click', (e) => {
-      if (!e.target.closest('#mainMenu') && !e.target.closest('#btnMenu')) {
-        document.getElementById('mainMenu').classList.add('hidden');
+      if (menuOpen && !e.target.closest('#btnMenu')) {
+        menuOpen = false;
+        SB.ipc.overlay.hide('main-menu');
       }
-      if (!e.target.closest('#contextMenu')) {
-        document.getElementById('contextMenu').classList.add('hidden');
-      }
-      if (!e.target.closest('#omniWrap')) {
-        document.getElementById('omniSuggestions').classList.add('hidden');
-      }
-      if (!e.target.closest('.side-panel') && !e.target.closest('#toolbar') && !e.target.closest('#titleBar') && !e.target.closest('#tabStrip')) {
-        // keep panels open when interacting with them
-      }
+      if (!e.target.closest('#omniWrap')) SB.ipc.overlay.hide('omni-suggestions');
     });
   });
 
   // ---- context menu ------------------------------------------------------
+  let lastCtx = null;
+
   SB.showContextMenu = function (params, tab) {
-    const cm = document.getElementById('contextMenu');
     const items = [];
     const sel = (params.selectionText || '').trim();
 
     if (sel) {
-      items.push({ act: 'ask-shine', label: 'Ask Shine about this', icon: 'spark' });
+      items.push({ act: 'ask-shine', label: 'Ask Shine about this' });
       items.push({ act: 'google-sel', label: 'Search Google for selection', icon: 'search' });
       items.push({ act: 'site-sel', label: 'Search this site for selection', icon: 'globe' });
       items.push({ act: 'copy', label: 'Copy', icon: 'copy' });
@@ -209,7 +189,7 @@
       items.push({ act: 'sep' });
     }
     if (params.misspelledWord) {
-      items.push({ act: 'spell', label: `Add to dictionary`, disabled: true });
+      items.push({ act: 'spell', label: 'Add to dictionary', disabled: true });
       items.push({ act: 'sep' });
     }
     items.push({ act: 'inspect', label: 'Inspect element' });
@@ -217,35 +197,25 @@
     items.push({ act: 'new-tab', label: 'New tab' });
     items.push({ act: 'new-private', label: 'New private window' });
 
-    cm.innerHTML = items.map((it) => {
-      if (it.act === 'sep') return '<div class="menu-sep"></div>';
-      const icons = {
-        spark: '<path d="M12 3c.6 4.2 4.8 8.4 9 9-4.2.6-8.4 4.8-9 9-.6-4.2-4.8-8.4-9-9 4.2-.6 8.4-4.8 9-9Z"/>',
-        search: '<circle cx="11" cy="11" r="6.5"/><line x1="16" y1="16" x2="21" y2="21"/>',
-        globe: '<circle cx="12" cy="12" r="8"/><path d="M4 12h16"/>',
-        copy: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>',
-        translate: '<path d="M4 6h9M8.5 4v2c0 4-2 7-4.5 8.5"/><path d="M6 10c1.5 2.5 3.5 4 6 5"/><path d="M13 20l3.5-9 3.5 9"/>',
-      };
-      const icon = it.icon ? `<svg class="svg-icon" viewBox="0 0 24 24" style="flex:none">${icons[it.icon]}</svg>` : '';
-      return `<button data-act="${it.act}" data-sel="${it.act.includes('-sel') || it.act === 'ask-shine' ? '1' : ''}" ${it.disabled ? 'disabled style="opacity:.35;pointer-events:none"' : ''}>
-        <span style="display:flex;align-items:center;gap:9px">${icon}${SB.escapeHtml(it.label)}</span>
-      </button>`;
-    }).join('');
+    lastCtx = { params, tab, sel };
 
-    cm.classList.remove('hidden');
-    const w = cm.offsetWidth, h = cm.offsetHeight;
-    cm.style.left = Math.min(params.x, window.innerWidth - w - 8) + 'px';
-    cm.style.top = Math.min(params.y, window.innerHeight - h - 8) + 'px';
-
-    cm.querySelectorAll('button').forEach((b) => {
-      b.addEventListener('click', () => handleContext(b.dataset.act, params, tab, sel));
-    });
+    // params.x / params.y are relative to the page viewport, which starts
+    // below the browser chrome — add it so the overlay lands in window space.
+    const chromeH = SB.chromeH || 122;
+    SB.ipc.overlay.show('context-menu',
+      { mode: 'xy', x: params.x, y: params.y + chromeH },
+      { items });
   };
 
-  function handleContext(act, params, tab, sel) {
-    document.getElementById('contextMenu').classList.add('hidden');
+  function handleContext(act) {
+    if (!lastCtx) return;
+    const { params, tab } = lastCtx;
+    const sel = lastCtx.sel;
+    SB.ipc.overlay.hide('context-menu');
+    if (act === 'sep') return;
+
     const q = sel || params.selectionText || '';
-    const url = params.linkURL || params.srcURL || tab.url;
+    const url = params.linkURL || params.srcURL || (tab && tab.url);
     const engine = (SB.settings.searchEngine || 'google');
     const engines = {
       google: 'https://www.google.com/search?q=',
@@ -259,7 +229,7 @@
     const sq = (engines[engine] || engines.google) + encodeURIComponent(q);
 
     switch (act) {
-      case 'ask-shine': SB.ipc.shine.ask(q, 'selection'); SB.toast('Asking Shine…'); break;
+      case 'ask-shine': SB.shine.open(); SB.ipc.shine.ask(q, 'selection'); break;
       case 'google-sel': SB.loadTab(tab, sq); break;
       case 'site-sel': {
         try {
@@ -268,20 +238,20 @@
         } catch (e) { SB.loadTab(tab, sq); }
         break;
       }
-      case 'copy': navigator.clipboard.writeText(q).then(() => SB.toast('Copied to clipboard')); break;
-      case 'translate': SB.ipc.shine.ask(q, 'translate'); SB.toast('Asking Shine to translate…'); break;
+      case 'copy': SB.copy(q, 'Copied to clipboard'); break;
+      case 'translate': SB.shine.open(); SB.ipc.shine.ask(q, 'translate'); break;
       case 'undo': SB.ipc.tab.op(tab.id, 'undo'); break;
       case 'redo': SB.ipc.tab.op(tab.id, 'redo'); break;
       case 'cut': SB.ipc.tab.op(tab.id, 'cut'); break;
       case 'paste': SB.ipc.tab.op(tab.id, 'paste'); break;
       case 'select-all': SB.ipc.tab.op(tab.id, 'select-all'); break;
-      case 'copy-link': navigator.clipboard.writeText(params.linkURL); SB.toast('Link copied'); break;
+      case 'copy-link': SB.copy(params.linkURL, 'Link copied'); break;
       case 'open-link-new': SB.createTab({ url: params.linkURL, incognito: tab.incognito }); break;
-      case 'save-link': navigator.clipboard.writeText(params.linkURL); SB.toast('URL copied — use Ctrl+S in the page to save.'); break;
+      case 'save-link': SB.copy(params.linkURL, 'URL copied — use Ctrl+S in the page to save.'); break;
       case 'open-image': SB.createTab({ url: params.srcURL, incognito: tab.incognito }); break;
-      case 'copy-image': navigator.clipboard.writeText(params.srcURL); SB.toast('Image copied (address)'); break;
+      case 'copy-image': SB.copy(params.srcURL, 'Image copied (address)'); break;
       case 'save-image': SB.ipc.tab.op(tab.id, 'save-page'); break;
-      case 'copy-image-src': navigator.clipboard.writeText(params.srcURL); SB.toast('Image address copied'); break;
+      case 'copy-image-src': SB.copy(params.srcURL, 'Image address copied'); break;
       case 'save-page': SB.ipc.tab.op(tab.id, 'save-page'); break;
       case 'print': SB.ipc.tab.op(tab.id, 'print'); break;
       case 'inspect': SB.ipc.tab.op(tab.id, 'devtools'); break;
@@ -294,5 +264,49 @@
     }
   }
 
-  SB.menu = { open: openMenu, close: closeMenus, openFind, openSettings, closeFind };
+  // ---- routing clicks that come back from the overlay --------------------
+  SB.onOverlayAction = function (payload) {
+    if (!payload) return;
+    const { widget, action, data } = payload;
+
+    if (widget === 'main-menu') {
+      menuOpen = false;
+      SB.ipc.overlay.hide('main-menu');
+      const fn = ACTIONS[action];
+      if (fn) fn();
+      return;
+    }
+
+    if (widget === 'context-menu') {
+      handleContext(action);
+      return;
+    }
+
+    if (widget === 'selection-bar') {
+      SB.selectionBar.act(action);
+      return;
+    }
+
+    if (widget === 'omni-suggestions') {
+      SB.omnibox.onOverlayAction(action, data);
+      return;
+    }
+
+    if (widget === 'settings') {
+      // the settings panel runs itself inside the overlay; it only needs
+      // to tell this renderer about a couple of side effects
+      if (action === 'toast') SB.toast((data && data.text) || '');
+      if (action === 'panel-width') SB.ipc.shine.setWidth(data.ratio);
+      if (action === 'panel-open') { if (data.open) SB.shine.show(); else SB.shine.hide(); }
+    }
+  };
+
+  SB.menu = {
+    open: openMenu,
+    close: closeMenus,
+    openFind,
+    closeFind,
+    runFind,
+    ACTIONS,
+  };
 })();

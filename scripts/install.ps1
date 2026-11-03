@@ -42,7 +42,7 @@ $l = $sh.CreateShortcut($DeskLnk)
 $l.TargetPath = $Exe
 $l.WorkingDirectory = $LocalApp
 $l.IconLocation = "$LocalApp\resources\app\build\icon.ico,0"
-$l.Description = 'Shine Browser — browse with Shine AI side by side'
+$l.Description = 'Shine Browser — browse with Shine side by side'
 $l.Save()
 Write-Host ' done' -ForegroundColor Green
 
@@ -53,7 +53,7 @@ $l2 = $sh.CreateShortcut((Join-Path $StartDir 'Shine Browser.lnk'))
 $l2.TargetPath = $Exe
 $l2.WorkingDirectory = $LocalApp
 $l2.IconLocation = "$LocalApp\resources\app\build\icon.ico,0"
-$l2.Description = 'Shine Browser — browse with Shine AI side by side'
+$l2.Description = 'Shine Browser — browse with Shine side by side'
 $l2.Save()
 # flat copy so Windows Search finds it immediately
 $l3 = $sh.CreateShortcut($StartLnk)

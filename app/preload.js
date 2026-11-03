@@ -19,6 +19,7 @@ contextBridge.exposeInMainWorld('shine', {
     close: () => send('win:close'),
     isMaximized: () => invoke('win:is-maximized'),
     setChromeHeight: (h) => send('win:set-chrome-height', h),
+    setSidePanel: (w) => send('win:set-side-panel', w),
   },
 
   // tabs (web contents managed by the main process)
@@ -84,6 +85,13 @@ contextBridge.exposeInMainWorld('shine', {
     get: () => invoke('settings:get'),
     set: (patch) => invoke('settings:set', patch),
   },
+
+  // floating overlay (selection pill, menus, toasts, settings)
+  overlay: {
+    show: (widget, place, data) => send('overlay:show', { widget, place, data }),
+    hide: (widget) => send('overlay:hide', widget || null),
+  },
+
   app: {
     info: () => invoke('app:info'),
     openExternal: (url) => invoke('app:open-external', url),
@@ -105,6 +113,7 @@ contextBridge.exposeInMainWorld('shine', {
       'shine:reload', 'shine:history-back', 'shine:history-forward',
       'shine:bookmark-current', 'shine:toast', 'shine:state',
       'downloads:changed',
+      'overlay:action', 'overlay:dismiss', 'layout:views',
     ];
     const offs = channels.map((ch) => on(ch, (data) => cb(ch, data)));
     return () => offs.forEach((o) => o());

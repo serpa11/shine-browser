@@ -1,5 +1,6 @@
 """Shine Browser icon — pure monochrome, matching the supplied artwork:
-black square, 'Shine' large + 'Browser' small, white, no color at all."""
+black square, 'Shine' large + 'Browser' small and tucked under its right
+half, white, no colour, no gem, no glow."""
 import os
 
 from PIL import Image, ImageDraw, ImageFont
@@ -7,7 +8,7 @@ from PIL import Image, ImageDraw, ImageFont
 BUILD = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "build")
 os.makedirs(BUILD, exist_ok=True)
 
-# Try a thin humanist sans that matches the reference art.
+# Thin humanist sans that matches the reference art.
 FONT_CANDIDATES = [
     r"C:\Windows\Fonts\segoeuil.ttf",    # Segoe UI Light
     r"C:\Windows\Fonts\segoeui.ttf",     # Segoe UI
@@ -26,17 +27,25 @@ def load_font(size):
     return ImageFont.load_default()
 
 
-def fit_font(text, box_w, start, weight=1):
-    """Shrink until the text fits inside box_w."""
+def fit_font(text, box_w, start):
+    """Shrink until the ink width of the text fits inside box_w."""
     size = start
     while size > 8:
         f = load_font(size)
         d = ImageDraw.Draw(Image.new("L", (10, 10)))
-        w = d.textbbox((0, 0), text, font=f)[2]
-        if w <= box_w:
-            return f, w
+        b = d.textbbox((0, 0), text, font=f)
+        if (b[2] - b[0]) <= box_w:
+            return f, b
         size -= 2
-    return load_font(8), 0
+    f = load_font(8)
+    return f, ImageDraw.Draw(Image.new("L", (10, 10))).textbbox((0, 0), text, font=f)
+
+
+def ink_right_top(d, text, font, bbox, right, top):
+    """Draw so the text's ink box sits exactly under (right, top)."""
+    x0, y0, x1, y1 = bbox
+    d.text((right - (x1 - x0) - x0, top - y0), text, font=font, fill=(255, 255, 255, 255))
+    return (x1 - x0, y1 - y0)
 
 
 def make(size, ss=4):
@@ -44,23 +53,20 @@ def make(size, ss=4):
     img = Image.new("RGBA", (S, S), (0, 0, 0, 255))          # pure black tile
     d = ImageDraw.Draw(img)
 
-    # 'Shine' — large, light weight, centred slightly above middle
+    # ---- 'Shine' — large, light weight, centred a touch above middle ----
     shine = "Shine"
-    f1, _ = fit_font(shine, S * 0.80, int(S * 0.30))
-    b1 = d.textbbox((0, 0), shine, font=f1)
+    f1, b1 = fit_font(shine, S * 0.62, int(S * 0.24))
     w1, h1 = b1[2] - b1[0], b1[3] - b1[1]
-    x1 = (S - w1) / 2 - b1[0]
-    y1 = S * 0.40 - h1 / 2 - b1[1]
-    d.text((x1, y1), shine, font=f1, fill=(255, 255, 255, 255))
+    right1 = S * 0.5 + w1 / 2                     # ink box horizontally centred
+    top1 = S * 0.455 - h1 / 2                     # ink centre at 45.5% height
+    ink_right_top(d, shine, f1, b1, right1, top1)
 
-    # 'Browser' — small, tucked under the right half of 'Shine'
+    # ---- 'Browser' — small, tucked under the right half, clear gap ----
     word = "Browser"
-    f2, _ = fit_font(word, S * 0.46, int(S * 0.115))
-    b2 = d.textbbox((0, 0), word, font=f2)
+    f2, b2 = fit_font(word, S * 0.285, int(S * 0.075))
     w2, h2 = b2[2] - b2[0], b2[3] - b2[1]
-    x2 = x1 + w1 - w2                       # right-aligned to 'Shine'
-    y2 = y1 + h1 + S * 0.045
-    d.text((x2, y2), word, font=f2, fill=(255, 255, 255, 255))
+    top2 = top1 + h1 + S * 0.022                  # sits below, not into 'Shine'
+    ink_right_top(d, word, f2, b2, right1, top2)
 
     return img.resize((size, size), Image.LANCZOS)
 
