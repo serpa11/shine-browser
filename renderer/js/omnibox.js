@@ -64,7 +64,7 @@
     if (query) {
       out.push({ kind: 'search', label: q, sub: `Search ${engine()[0]} for “${q}”`, url: searchUrl(q) });
     }
-    if (query) {
+    if (query && SB.aiEnabled !== false) {
       out.push({ kind: 'shine', label: `Ask Shine about “${q}”`, sub: 'Shine', shine: q });
     }
     return out;

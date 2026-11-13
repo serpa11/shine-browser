@@ -1,8 +1,8 @@
 // =====================================================================
 // Shine Browser — Shine split-screen panel
 // The panel itself is a WebContentsView owned by the main process
-// (loading shineai-9mr.pages.dev). This module only toggles, resizes
-// and talks to it through IPC.
+// (loading https://shineai-9mr.pages.dev). This module only toggles,
+// resizes and talks to it through IPC.
 //
 // Positioning and width now come from the main process via the
 // `layout:views` event — the chrome renderer never sizes the view itself,
@@ -14,12 +14,16 @@
 
   function panelEl() { return document.getElementById('shinePanel'); }
 
+  function aiDisabled() { return SB.aiEnabled === false; }
+
   function show() {
+    if (aiDisabled()) {
+      SB.toast('Shine AI is disabled in Settings.');
+      return;
+    }
     const p = panelEl();
     p.classList.remove('hidden');
     p.classList.toggle('max', maximized);
-    document.getElementById('btnSplit').classList.add('active');
-    document.getElementById('btnShine').classList.add('active');
     SB.panelOpen = true;
     SB.ipc.settings.set({ panelOpen: true });
     SB.ipc.tab.layout(); // main sends layout:views which positions the DOM panel
@@ -27,14 +31,16 @@
 
   function hide() {
     panelEl().classList.add('hidden');
-    document.getElementById('btnSplit').classList.remove('active');
-    document.getElementById('btnShine').classList.remove('active');
     SB.panelOpen = false;
     SB.ipc.settings.set({ panelOpen: false });
     SB.ipc.tab.layout();
   }
 
   function toggle() {
+    if (aiDisabled()) {
+      SB.toast('Shine AI is disabled in Settings.');
+      return;
+    }
     panelEl().classList.contains('hidden') ? show() : hide();
   }
 
@@ -50,18 +56,12 @@
       SB.ipc.tab.layout();
     });
 
-    document.getElementById('btnSplit').addEventListener('click', toggle);
-
-    document.getElementById('btnShine').addEventListener('click', () => {
-      show();
-      setTimeout(() => SB.ipc.shine.send(''), 700);
-    });
-
     document.getElementById('brandBtn').addEventListener('click', () => {
       SB.loadTab(SB.activeTab(), 'shine://newtab');
     });
 
     document.getElementById('shineAskSel').addEventListener('click', async () => {
+      if (aiDisabled()) { SB.toast('Shine AI is disabled in Settings.'); return; }
       let text = SB.selection.text;
       if (!text) {
         const tab = SB.activeTab();

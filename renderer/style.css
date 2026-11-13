@@ -103,6 +103,23 @@ body {
 .wc:hover { background: var(--hover); color: var(--ink); }
 .wc-close:hover { background: rgba(255, 255, 255, 0.16); color: #fff; }
 
+/* Top-center title actions */
+.title-center {
+  -webkit-app-region: no-drag;
+  display: flex; align-items: center; gap: 10px;
+  margin: 0 auto;
+}
+.title-btn {
+  display: flex; align-items: center; gap: 7px;
+  border: 1px solid var(--line-soft); border-radius: 999px;
+  background: transparent; color: var(--ink-70);
+  font-family: inherit; font-size: 12px;
+  padding: 7px 14px 7px 11px; cursor: pointer; white-space: nowrap;
+  transition: color .14s ease, background .14s ease, border-color .14s ease;
+}
+.title-btn:hover { color: var(--ink); background: var(--hover); border-color: var(--line); }
+.title-btn .svg-icon { width: 14px; height: 14px; }
+
 /* ======================= TAB STRIP ================================== */
 #tabStrip {
   height: var(--tabs-h);

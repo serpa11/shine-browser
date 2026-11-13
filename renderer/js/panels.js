@@ -8,7 +8,7 @@
 // =====================================================================
 (function () {
   const PANELS = ['panelHistory', 'panelFavorites', 'panelDownloads',
-    'panelExtensions', 'panelPC', 'panelBrowser'];
+    'panelPC', 'panelBrowser'];
 
   function syncWidth() {
     // the panel that is currently visible; report its width so main can
@@ -164,49 +164,6 @@
     });
   }
 
-  // ---- Extensions --------------------------------------------------------
-  function renderExtensions() {
-    const host = document.getElementById('extensionsList');
-    if (!SB.extensions.length) {
-      host.innerHTML = `<div class="empty-state">
-        No extensions installed yet.<br><br>
-        <strong>Load unpacked</strong> installs a folder from your PC.<br>
-        Browse the <strong>Chrome Web Store</strong> — Shine Browser installs it automatically.
-      </div>`;
-      return;
-    }
-    host.innerHTML = SB.extensions.map((x) => `
-      <div class="list-item" data-id="${SB.escapeHtml(x.id)}">
-        <span class="favicon" style="display:grid;place-items:center">
-          <svg class="svg-icon" viewBox="0 0 24 24"><path d="M10 3.5a2.5 2.5 0 0 1 5 0V6h3a1 1 0 0 1 1 1v3h2.5a2.5 2.5 0 0 1 0 5H19v3a1 1 0 0 1-1 1h-3v-2.5a2.5 2.5 0 0 0-5 0V19H7a1 1 0 0 1-1-1v-3H3.5a2.5 2.5 0 0 1 0-5H6V7a1 1 0 0 1 1-1h3V3.5Z"/></svg>
-        </span>
-        <div class="li-main">
-          <div class="li-title">${SB.escapeHtml(x.name)}</div>
-          <div class="li-sub">v${SB.escapeHtml(x.version || '?')} · ${x.loaded ? 'active' : 'disabled'}</div>
-        </div>
-        <input type="checkbox" ${x.loaded ? 'checked' : ''} data-toggle="${SB.escapeHtml(x.id)}" title="Enable" />
-        <button class="icon-btn sm li-action" data-removeext="${SB.escapeHtml(x.id)}" title="Remove">
-          <svg class="svg-icon" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
-        </button>
-      </div>`).join('');
-
-    host.querySelectorAll('[data-removeext]').forEach((btn) => {
-      btn.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        await SB.ipc.extensions.remove(btn.dataset.removeext);
-        await SB.refreshExtensions();
-        SB.toast('Extension removed');
-      });
-    });
-    host.querySelectorAll('[data-toggle]').forEach((cb) => {
-      cb.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        await SB.ipc.extensions.toggle(cb.dataset.toggle);
-        await SB.refreshExtensions();
-      });
-    });
-  }
-
   // ---- PC Control --------------------------------------------------------
   const pc = {
     tab: 'apps',
@@ -347,15 +304,6 @@
       SB.toast('History cleared');
     });
     document.getElementById('openDownloadsFolder').addEventListener('click', () => SB.ipc.app.openDownloads());
-    document.getElementById('extLoad').addEventListener('click', async () => {
-      const r = await SB.ipc.extensions.load();
-      if (r.ok) { SB.toast('Installed ' + (r.name || 'extension')); await SB.refreshExtensions(); }
-      else if (!r.canceled) SB.toast(r.error || 'Could not load extension');
-    });
-    document.getElementById('extStore').addEventListener('click', () => {
-      const tab = SB.activeTab();
-      if (tab) SB.loadTab(tab, 'https://chromewebstore.google.com/');
-    });
     document.getElementById('importBookmarks').addEventListener('click', () => {
       SB.toast("Bookmarks import: use Chrome's export then drop the file in your Shine Browser profile folder.");
     });
@@ -370,6 +318,7 @@
     });
 
     document.getElementById('pcAskBtn').addEventListener('click', () => {
+      if (SB.aiEnabled === false) { SB.toast('Shine AI is disabled in Settings.'); return; }
       const q = document.getElementById('pcAsk').value.trim();
       if (!q) return;
       closePanels();
@@ -399,6 +348,7 @@
     const bcAsk = document.getElementById('bcAsk');
     const bcAskBtn = document.getElementById('bcAskBtn');
     if (bcAskBtn) bcAskBtn.addEventListener('click', () => {
+      if (SB.aiEnabled === false) { SB.toast('Shine AI is disabled in Settings.'); return; }
       const q = bcAsk.value.trim();
       if (!q) return;
       closePanels();
@@ -427,5 +377,5 @@
     };
   });
 
-  SB.panels = { open: openPanel, close: closePanels, toggle: togglePanel, renderFavorites, renderHistory, renderDownloads, renderExtensions, pc, browser };
+  SB.panels = { open: openPanel, close: closePanels, toggle: togglePanel, renderFavorites, renderHistory, renderDownloads, pc, browser };
 })();

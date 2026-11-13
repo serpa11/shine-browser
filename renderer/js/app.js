@@ -17,9 +17,6 @@
     document.getElementById('btnReload').addEventListener('click', () => SB.reloadActive());
     document.getElementById('newTabBtn').addEventListener('click', () => SB.createTab());
 
-    document.getElementById('btnSidebar').addEventListener('click', () => SB.panels.toggle('panelFavorites'));
-    document.getElementById('btnFind').addEventListener('click', () => SB.menu.openFind());
-    document.getElementById('btnExtensions').addEventListener('click', () => SB.panels.toggle('panelExtensions'));
     document.getElementById('btnDownloads').addEventListener('click', () => SB.panels.toggle('panelDownloads'));
     document.getElementById('btnHistory').addEventListener('click', () => SB.panels.toggle('panelHistory'));
     document.getElementById('btnFavorites').addEventListener('click', () => SB.panels.toggle('panelFavorites'));
@@ -27,6 +24,7 @@
     document.getElementById('btnPC').addEventListener('click', () => SB.panels.toggle('panelPC'));
     document.getElementById('btnBrowser').addEventListener('click', () => SB.panels.toggle('panelBrowser'));
     document.getElementById('btnShine').addEventListener('click', () => SB.shine.toggle());
+    document.getElementById('btnNewTabCenter').addEventListener('click', () => SB.createTab());
     document.getElementById('btnTabSearch').addEventListener('click', () => {
       const q = prompt('Search tabs');
       if (!q) return;
@@ -250,11 +248,12 @@
     SB.shine.init();
 
     SB.settings = await SB.ipc.settings.get();
+    SB.aiEnabled = SB.settings.aiEnabled !== false;
+    SB.updateAIUI();
     await Promise.all([
       SB.refreshBookmarks(),
       SB.refreshHistory(),
       SB.refreshDownloads(),
-      SB.refreshExtensions(),
     ]);
 
     if (SB.settings.theme === 'light') document.body.classList.add('light');

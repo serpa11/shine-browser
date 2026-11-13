@@ -100,6 +100,7 @@
       $('setStartup').value = s.startup || 'homepage';
       $('setPanelWidth').value = Math.round((s.panelWidth || 0.42) * 100);
       $('setPanelOpen').checked = !!s.panelOpen;
+      $('setAIEnabled').checked = s.aiEnabled !== false;
       $('profileName').textContent = s.profileName || 'Person 1';
 
       const info = await API.app.info();
@@ -139,6 +140,10 @@
     $('setPanelOpen').addEventListener('change', async (e) => {
       await API.settings.set({ panelOpen: e.target.checked });
       API.action({ widget: 'settings', action: 'panel-open', data: { open: e.target.checked } });
+    });
+    $('setAIEnabled').addEventListener('change', async (e) => {
+      await API.settings.set({ aiEnabled: e.target.checked });
+      API.action({ widget: 'settings', action: 'ai-toggle', data: { enabled: e.target.checked } });
     });
     $('changeDl').addEventListener('click', () => {
       API.action({ widget: 'settings', action: 'toast', data: { text: 'Downloads folder is set in Settings → Downloads.' } });

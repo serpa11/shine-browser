@@ -15,10 +15,10 @@
     'downloads': () => SB.panels.toggle('panelDownloads'),
     'favorites': () => SB.panels.toggle('panelFavorites'),
     'reading-list': () => SB.toast('Reading list: save pages with Ctrl+D, they appear in Favorites.'),
-    'extensions': () => SB.panels.toggle('panelExtensions'),
-    'web-store': () => { const t = SB.activeTab(); if (t) SB.loadTab(t, 'https://chromewebstore.google.com/'); },
     'pc-control': () => SB.panels.toggle('panelPC'),
     'browser-control': () => SB.panels.toggle('panelBrowser'),
+    'sidebar': () => SB.panels.toggle('panelFavorites'),
+    'split': () => SB.shine.toggle(),
     'shine': () => SB.shine.toggle(),
     'zoom-in': () => SB.goActive('zoom-in'),
     'zoom-out': () => SB.goActive('zoom-out'),
@@ -39,13 +39,15 @@
     { act: 'new-window', label: 'New window', kbd: 'Ctrl+N' },
     { act: 'new-private', label: 'New private window', kbd: 'Ctrl+Shift+N' },
     { act: 'sep' },
+    { act: 'sidebar', label: 'Sidebar (Favorites)', kbd: 'Ctrl+B' },
+    { act: 'split', label: 'Shine split screen', kbd: 'Ctrl+Shift+S' },
+    { act: 'find', label: 'Find on page', kbd: 'Ctrl+F' },
+    { act: 'sep' },
     { act: 'history', label: 'History', kbd: 'Ctrl+H' },
     { act: 'downloads', label: 'Downloads', kbd: 'Ctrl+J' },
     { act: 'favorites', label: 'Favorites', kbd: 'Ctrl+B' },
     { act: 'reading-list', label: 'Reading list' },
     { act: 'sep' },
-    { act: 'extensions', label: 'Extensions' },
-    { act: 'web-store', label: 'Chrome Web Store' },
     { act: 'pc-control', label: 'PC Control' },
     { act: 'browser-control', label: 'Browser Control' },
     { act: 'shine', label: 'Shine split screen', kbd: 'Ctrl+Shift+S' },
@@ -152,7 +154,9 @@
     const sel = (params.selectionText || '').trim();
 
     if (sel) {
-      items.push({ act: 'ask-shine', label: 'Ask Shine about this' });
+      if (SB.aiEnabled !== false) {
+        items.push({ act: 'ask-shine', label: 'Ask Shine about this' });
+      }
       items.push({ act: 'google-sel', label: 'Search Google for selection', icon: 'search' });
       items.push({ act: 'site-sel', label: 'Search this site for selection', icon: 'globe' });
       items.push({ act: 'copy', label: 'Copy', icon: 'copy' });
@@ -229,7 +233,7 @@
     const sq = (engines[engine] || engines.google) + encodeURIComponent(q);
 
     switch (act) {
-      case 'ask-shine': SB.shine.open(); SB.ipc.shine.ask(q, 'selection'); break;
+      case 'ask-shine': if (SB.aiEnabled === false) { SB.toast('Shine AI is disabled in Settings.'); break; } SB.shine.open(); SB.ipc.shine.ask(q, 'selection'); break;
       case 'google-sel': SB.loadTab(tab, sq); break;
       case 'site-sel': {
         try {
@@ -298,6 +302,10 @@
       if (action === 'toast') SB.toast((data && data.text) || '');
       if (action === 'panel-width') SB.ipc.shine.setWidth(data.ratio);
       if (action === 'panel-open') { if (data.open) SB.shine.show(); else SB.shine.hide(); }
+      if (action === 'ai-toggle') {
+        SB.settings.aiEnabled = !!data.enabled;
+        SB.updateAIUI();
+      }
     }
   };
 

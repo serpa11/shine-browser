@@ -1,6 +1,7 @@
 """Shine Browser icon — pure monochrome, matching the supplied artwork:
 black square, 'Shine' large + 'Browser' small and tucked under its right
-half, white, no colour, no gem, no glow."""
+half, white, no colour, no gem, no glow. Text is sized big so it stays
+legible even at tiny taskbar sizes."""
 import os
 
 from PIL import Image, ImageDraw, ImageFont
@@ -55,7 +56,7 @@ def make(size, ss=4):
 
     # ---- 'Shine' — large, light weight, centred a touch above middle ----
     shine = "Shine"
-    f1, b1 = fit_font(shine, S * 0.62, int(S * 0.24))
+    f1, b1 = fit_font(shine, S * 0.72, int(S * 0.26))
     w1, h1 = b1[2] - b1[0], b1[3] - b1[1]
     right1 = S * 0.5 + w1 / 2                     # ink box horizontally centred
     top1 = S * 0.455 - h1 / 2                     # ink centre at 45.5% height
@@ -63,7 +64,7 @@ def make(size, ss=4):
 
     # ---- 'Browser' — small, tucked under the right half, clear gap ----
     word = "Browser"
-    f2, b2 = fit_font(word, S * 0.285, int(S * 0.075))
+    f2, b2 = fit_font(word, S * 0.34, int(S * 0.085))
     w2, h2 = b2[2] - b2[0], b2[3] - b2[1]
     top2 = top1 + h1 + S * 0.022                  # sits below, not into 'Shine'
     ink_right_top(d, word, f2, b2, right1, top2)

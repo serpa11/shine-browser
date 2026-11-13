@@ -157,20 +157,25 @@
         msgEl.textContent = 'Installed. Press Launch to open Shine Browser.';
         btnInstall.textContent = 'Launch Shine Browser';
         btnInstall.disabled = false;
-        btnInstall.onclick = () => window.shineSetup.finish();
         btnSkip.textContent = 'Close';
       } else {
         msgEl.className = 'setup-msg err';
         msgEl.textContent = result.error || 'Install did not complete. You can run scripts\\install.ps1 instead.';
         btnInstall.textContent = 'Try again';
         btnInstall.disabled = false;
-        btnInstall.onclick = start;
         optsEl.style.opacity = '';
         optsEl.style.pointerEvents = '';
       }
     }
 
-    btnInstall.onclick = start;
+    btnInstall.addEventListener('click', async () => {
+      // If setup already completed, this button says "Launch" — finish and open the app.
+      if (btnInstall.textContent.indexOf('Launch') !== -1) {
+        window.shineSetup.finish();
+        return;
+      }
+      await start();
+    });
     btnSkip.addEventListener('click', () => {
       window.shineSetup.finish();
     });

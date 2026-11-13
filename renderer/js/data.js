@@ -109,3 +109,39 @@ SB.updateBookmarkStar = function () {
   }
   star.classList.toggle('on', SB.bookmarks.some((b) => b.url === tab.url));
 };
+
+// ---- AI gating ------------------------------------------------------------
+// When the user disables Shine AI in settings, every AI feature is hidden
+// and disabled so the browser is a plain, non-AI browser.
+SB.aiEnabled = true;
+SB.updateAIUI = function () {
+  const enabled = SB.aiEnabled !== false;
+  const el = (id) => document.getElementById(id);
+
+  // Top-center Ask Shine button
+  const shineBtn = el('btnShine');
+  if (shineBtn) shineBtn.style.display = enabled ? '' : 'none';
+
+  // Shine panel toggle via menu is handled by the menu itself; hide the
+  // split-screen panel if it is open.
+  if (!enabled) {
+    el('shinePanel')?.classList.add('hidden');
+    SB.panelOpen = false;
+  }
+
+  // Selection bar "Ask Shine" button is rebuilt from SB.selectionActions;
+  // it reads SB.aiEnabled, so just re-show if there is a selection.
+  if (enabled && SB.selection.text) {
+    // re-render will pick up the flag
+  }
+
+  // PC Control / Browser Control "Ask Shine" inputs
+  const pcAsk = el('pcAsk');
+  const pcAskBtn = el('pcAskBtn');
+  if (pcAsk) pcAsk.style.display = enabled ? '' : 'none';
+  if (pcAskBtn) pcAskBtn.style.display = enabled ? '' : 'none';
+  const bcAsk = el('bcAsk');
+  const bcAskBtn = el('bcAskBtn');
+  if (bcAsk) bcAsk.style.display = enabled ? '' : 'none';
+  if (bcAskBtn) bcAskBtn.style.display = enabled ? '' : 'none';
+};

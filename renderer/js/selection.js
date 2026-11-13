@@ -61,7 +61,16 @@
   };
 
   function buttons() {
-    return Object.keys(ACTIONS).map((act) => ({
+    const acts = Object.keys(ACTIONS);
+    if (SB.aiEnabled === false) {
+      // remove the AI "Ask Shine" action
+      return acts.filter((a) => a !== 'ask').map((act) => ({
+        act,
+        label: ACTIONS[act].label,
+        primary: !!ACTIONS[act].primary,
+      }));
+    }
+    return acts.map((act) => ({
       act,
       label: ACTIONS[act].label,
       primary: !!ACTIONS[act].primary,
@@ -102,6 +111,10 @@
     act(name) {
       const a = ACTIONS[name];
       if (!a) return;
+      if (name === 'ask' && SB.aiEnabled === false) {
+        SB.toast('Shine AI is disabled in Settings.');
+        return;
+      }
       SB.ipc.overlay.hide('selection-bar');
       try { a.run(); } catch (e) { /* ignore */ }
     },
