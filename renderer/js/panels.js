@@ -166,65 +166,12 @@
 
   // ---- PC Control --------------------------------------------------------
   const pc = {
-    tab: 'apps',
     apps: [],
-    async load(which) {
-      pc.tab = which || pc.tab;
-      document.querySelectorAll('#pcTabs button').forEach((b) => {
-        b.classList.toggle('active', b.dataset.pc === pc.tab);
-      });
+    async load() {
       const host = document.getElementById('pcBody');
-      host.innerHTML = '<div class="empty-state">Loading…</div>';
-
-      if (pc.tab === 'apps') {
-        pc.apps = await SB.ipc.pc.apps();
-        pc.renderApps();
-      } else if (pc.tab === 'system') {
-        const info = await SB.ipc.pc.info();
-        host.innerHTML = `
-          <div style="padding:6px 10px">
-            <div class="settings-group" style="margin-bottom:10px">
-              <h3>Operating system</h3>
-              <div class="about"><strong>${SB.escapeHtml(info.os)}</strong><br>
-              ${info.arch} · hostname <strong>${SB.escapeHtml(info.hostname)}</strong> · user <strong>${SB.escapeHtml(info.user)}</strong><br>
-              Uptime ${SB.escapeHtml(info.uptimeHuman)}</div>
-            </div>
-            <div class="settings-group" style="margin-bottom:10px">
-              <h3>Processor & memory</h3>
-              <div class="about"><strong>${SB.escapeHtml(info.cpu.model)}</strong><br>
-              ${info.cpu.cores} cores @ ${info.cpu.speedMHz} MHz<br>
-              RAM ${info.memory.usedGB} GB of ${info.memory.totalGB} GB used (${info.memory.usagePct}%)</div>
-              <div class="progress" style="margin-top:10px"><div style="width:${info.memory.usagePct}%"></div></div>
-            </div>
-            <div class="settings-group" style="margin-bottom:10px">
-              <h3>Storage</h3>
-              ${info.disks.map((d) => `
-                <div class="about" style="margin-bottom:8px">
-                  <strong>${SB.escapeHtml(d.letter)}</strong> — ${d.freeGB} GB free of ${d.sizeGB} GB
-                  <div class="progress" style="margin-top:5px"><div style="width:${d.sizeGB ? Math.round(((d.sizeGB - d.freeGB) / d.sizeGB) * 100) : 0}%"></div></div>
-                </div>`).join('')}
-            </div>
-            <div class="settings-group">
-              <h3>Browser</h3>
-              <div class="about">Shine Browser <strong>${SB.escapeHtml(info.electron)}</strong><br>
-              Chromium <strong>${SB.escapeHtml(info.chrome)}</strong> · Node ${SB.escapeHtml(info.node)}<br>
-              Engine updated for 2026 — every modern site works.</div>
-            </div>
-          </div>`;
-      } else if (pc.tab === 'processes') {
-        const procs = await SB.ipc.pc.processes();
-        host.innerHTML = procs.map((p) => `
-          <div class="list-item">
-            <span class="favicon" style="display:grid;place-items:center">
-              <svg class="svg-icon" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="12" rx="2"/><path d="M9 21h6"/></svg>
-            </span>
-            <div class="li-main">
-              <div class="li-title">${SB.escapeHtml(p.name)}</div>
-              <div class="li-sub">PID ${p.pid}</div>
-            </div>
-            <div class="li-sub">${p.memMB} MB</div>
-          </div>`).join('');
-      }
+      host.innerHTML = '<div class="empty-state">Ask Shine above to control your PC, or use the quick actions below.</div>';
+      pc.apps = await SB.ipc.pc.apps();
+      pc.renderApps();
     },
     renderApps() {
       const host = document.getElementById('pcBody');
@@ -307,14 +254,23 @@
     document.getElementById('importBookmarks').addEventListener('click', () => {
       SB.toast("Bookmarks import: use Chrome's export then drop the file in your Shine Browser profile folder.");
     });
-    document.querySelectorAll('#pcTabs button').forEach((b) => {
-      b.addEventListener('click', () => pc.load(b.dataset.pc));
-    });
     document.getElementById('pcSearch').addEventListener('input', () => pc.renderApps());
     document.getElementById('pcScreenshot').addEventListener('click', async () => {
+      // Vision: capture screenshot and send to Shine AI
       const r = await SB.ipc.pc.screenshot();
-      if (r.ok) SB.toast('Screenshot saved: ' + r.path);
-      else SB.toast(r.error || 'Screenshot failed');
+      if (!r.ok) { SB.toast(r.error || 'Screenshot failed'); return; }
+      closePanels();
+      SB.shine.open();
+      SB.ipc.shine.ask('PC Control vision: analyze this screenshot and tell me what you see. What apps are open, what is the user doing, and what should I do next?', 'pc-control');
+      SB.toast('Screenshot captured — asking Shine to analyze…');
+    });
+    document.getElementById('pcSysInfo').addEventListener('click', async () => {
+      const info = await SB.ipc.pc.info();
+      if (!info) { SB.toast('Could not read system info'); return; }
+      closePanels();
+      SB.shine.open();
+      SB.ipc.shine.ask('PC Control: Here is my system info — ' + JSON.stringify(info) + '. Tell me about my computer and what I can do with it.', 'pc-control');
+      SB.toast('Sending system info to Shine…');
     });
 
     document.getElementById('pcAskBtn').addEventListener('click', () => {
@@ -331,7 +287,7 @@
     });
 
     // Browser Control
-    const btnNewTab = document.getElementById('bcNewTab') || document.querySelector('[data-bc="new-tab"]');
+    const btnNewTab = document.querySelector('[data-bc="new-tab"]');
     const btnReload = document.querySelector('[data-bc="reload"]');
     const btnBack = document.querySelector('[data-bc="back"]');
     const btnForward = document.querySelector('[data-bc="forward"]');
@@ -353,7 +309,7 @@
       if (!q) return;
       closePanels();
       SB.shine.open();
-      SB.ipc.shine.ask(q, 'explain');
+      SB.ipc.shine.ask('Browser Control: ' + q, 'browser-control');
       SB.toast('Asking Shine to drive the browser…');
     });
     if (bcAsk) bcAsk.addEventListener('keydown', (e) => {

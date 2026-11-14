@@ -104,9 +104,6 @@
         <button class="icon-btn" id="btnFavorites" title="Favorites">
           <svg class="svg-icon" viewBox="0 0 24 24"><path d="M7 4h10a1 1 0 0 1 1 1v15l-6-4-6 4V5a1 1 0 0 1 1-1Z"/></svg>
         </button>
-        <button class="icon-btn" id="btnProfile" title="Profile">
-          <svg class="svg-icon" viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="3.5"/><path d="M5 19.5c1.4-3.4 4-5 7-5s5.6 1.6 7 5"/></svg>
-        </button>
         <button class="icon-btn" id="btnMenu" title="Menu">
           <svg class="svg-icon" viewBox="0 0 24 24"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
         </button>
@@ -179,21 +176,17 @@
         <span>PC Control</span>
         <button class="icon-btn sm panel-close" data-close="panelPC"><svg class="svg-icon" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
       </div>
-      <div class="panel-tabs" id="pcTabs">
-        <button class="active" data-pc="apps">Apps</button>
-        <button data-pc="system">System</button>
-        <button data-pc="processes">Processes</button>
-      </div>
-      <div class="panel-actions">
-        <input id="pcSearch" placeholder="Search installed apps…" />
-        <button class="btn-ghost sm" id="pcScreenshot">Screenshot</button>
-      </div>
-      <div class="panel-body" id="pcBody"></div>
       <div class="panel-actions">
         <div class="panel-label">Ask Shine to control your PC</div>
-        <input id="pcAsk" placeholder="e.g. open notepad, take a screenshot, launch chrome" />
+        <input id="pcAsk" placeholder="e.g. open notepad, take a screenshot, launch chrome, show system info" />
         <button class="btn-primary sm" id="pcAskBtn">Ask Shine</button>
       </div>
+      <div class="panel-actions">
+        <button class="btn-ghost sm" id="pcScreenshot">Screenshot (Vision)</button>
+        <button class="btn-ghost sm" id="pcSysInfo">System Info</button>
+      </div>
+      <div class="panel-search"><input id="pcSearch" placeholder="Search installed apps…" /></div>
+      <div class="panel-body" id="pcBody"></div>
     </div>
 
     <!-- ================= BROWSER CONTROL ================= -->
@@ -201,6 +194,11 @@
       <div class="panel-head">
         <span>Browser Control</span>
         <button class="icon-btn sm panel-close" data-close="panelBrowser"><svg class="svg-icon" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+      </div>
+      <div class="panel-actions">
+        <div class="panel-label">Ask Shine to drive the browser</div>
+        <input id="bcAsk" placeholder="e.g. open youtube and search for lofi, go to github, new tab" />
+        <button class="btn-primary sm" id="bcAskBtn">Ask Shine</button>
       </div>
       <div class="panel-actions">
         <button class="btn-ghost sm" data-bc="new-tab">New tab</button>
@@ -213,11 +211,6 @@
       <div class="panel-body">
         <div class="panel-label">Open tabs</div>
         <div id="bcTabs"></div>
-        <div class="panel-label">Ask Shine to drive the browser</div>
-        <div class="panel-actions">
-          <input id="bcAsk" placeholder="e.g. open youtube and search for lofi" />
-          <button class="btn-ghost sm" id="bcAskBtn">Ask</button>
-        </div>
       </div>
     </div>
   </div>

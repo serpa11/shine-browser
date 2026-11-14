@@ -130,6 +130,10 @@ function createWindow() {
   });
 
   createShinePanel();
+  // Create the floating overlay view eagerly so it's added after all initial
+  // views (shine panel). Child views stack in creation order, so this keeps
+  // the overlay above shineView and any tabs created later.
+  createOverlayView();
 }
 
 // ---------------------------------------------------------------------------
@@ -198,7 +202,13 @@ function layoutViews() {
 // ---------------------------------------------------------------------------
 // Floating overlay view (selection pill, menus, toasts)
 // ---------------------------------------------------------------------------
-function ensureOverlay() {
+// ---------------------------------------------------------------------------
+// Floating overlay view (selection pill, menus, toasts)
+// Created eagerly at window creation so it's always stacked above tab views.
+// Child views stack in creation order, so layoutViews() re-raises it after
+// any tab view is added.
+// ---------------------------------------------------------------------------
+function createOverlayView() {
   if (overlayView || !mainWindow || mainWindow.isDestroyed()) return overlayView;
   overlayView = new WebContentsView({
     webPreferences: {
@@ -232,6 +242,10 @@ function ensureOverlay() {
     sendToRenderer('overlay:dismiss', {});
   });
   ov.setWindowOpenHandler(() => ({ action: 'deny' }));
+  return overlayView;
+}
+
+function ensureOverlay() {
   return overlayView;
 }
 
@@ -593,6 +607,7 @@ function createShinePanel() {
   shineView.setBackgroundColor('#000000');
   mainWindow.contentView.addChildView(shineView);
   shineView.webContents.loadURL(SHINE_URL).catch(() => {});
+  layoutViews();
 
   shineView.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:/i.test(url)) shell.openExternal(url);
@@ -859,11 +874,27 @@ if (api) {
 
   wpBtn.addEventListener('click', function () {
     if (!api.pickWallpaper) return;
-    api.pickWallpaper().then(function (ok) { if (ok) api.reload(); }).catch(function () {});
+    api.pickWallpaper().then(function (r) {
+      if (r && r.ok && r.css) {
+        document.body.style.backgroundImage = r.css;
+        document.body.classList.add('wp');
+        wpLabel.textContent = 'Change wallpaper';
+        wpBtn.classList.add('on');
+        wpClear.style.display = '';
+      }
+    }).catch(function () {});
   });
   wpClear.addEventListener('click', function () {
     if (!api.clearWallpaper) return;
-    api.clearWallpaper().then(function () { api.reload(); }).catch(function () {});
+    api.clearWallpaper().then(function (r) {
+      if (r && r.ok) {
+        document.body.style.backgroundImage = '';
+        document.body.classList.remove('wp');
+        wpLabel.textContent = 'Add wallpaper';
+        wpBtn.classList.remove('on');
+        wpClear.style.display = 'none';
+      }
+    }).catch(function () {});
   });
 }
 </script></body></html>`;
@@ -897,18 +928,18 @@ function setupIpc() {
       properties: ['openFile'],
       filters: [{ name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp'] }],
     });
-    if (r.canceled || !r.filePaths || !r.filePaths[0]) return false;
+    if (r.canceled || !r.filePaths || !r.filePaths[0]) return { ok: false, css: null };
     const src = r.filePaths[0];
     const dest = path.join(USER_DATA(), 'wallpaper' + (path.extname(src).toLowerCase() || '.png'));
     try {
       fs.copyFileSync(src, dest);
     } catch (err) {
-      return false;
+      return { ok: false, css: null };
     }
     const s = store.read('settings');
     s.wallpaper = dest;
     store.write('settings', s);
-    return true;
+    return { ok: true, css: wallpaperDataUrl() };
   });
   ipcMain.handle('nt:clear-wallpaper', () => {
     const s = store.read('settings');
@@ -917,7 +948,7 @@ function setupIpc() {
     }
     delete s.wallpaper;
     store.write('settings', s);
-    return true;
+    return { ok: true };
   });
 
   // --- tabs (all managed here) ---
