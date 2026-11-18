@@ -73,9 +73,8 @@ body {
 }
 .brand {
   display: flex; align-items: center; gap: 7px;
-  font-size: 20px; font-weight: 700; color: var(--ink);
+  font-size: 14px; font-weight: 400; color: var(--ink-70);
   -webkit-app-region: no-drag; cursor: pointer; white-space: nowrap;
-  letter-spacing: -0.5px;
 }
 .brand:hover { color: var(--ink); }
 

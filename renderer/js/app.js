@@ -22,14 +22,6 @@
     document.getElementById('btnFavorites').addEventListener('click', () => SB.panels.toggle('panelFavorites'));
     document.getElementById('btnShine').addEventListener('click', () => SB.shine.toggle());
     document.getElementById('btnNewTabCenter').addEventListener('click', () => SB.createTab());
-    document.getElementById('btnTabSearch').addEventListener('click', () => {
-      const q = prompt('Search tabs');
-      if (!q) return;
-      const t = SB.tabs.find((x) => (x.title || '').toLowerCase().includes(q.toLowerCase()) ||
-        (x.url || '').toLowerCase().includes(q.toLowerCase()));
-      if (t) SB.activateTab(t.id);
-      else SB.toast('No matching tab');
-    });
   }
 
   function initKeyboard() {
