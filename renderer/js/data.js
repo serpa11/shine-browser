@@ -118,7 +118,7 @@ SB.updateAIUI = function () {
   const enabled = SB.aiEnabled !== false;
   const el = (id) => document.getElementById(id);
 
-  // Top-center Ask Shine button
+  // Top-center Open Shine button
   const shineBtn = el('btnShine');
   if (shineBtn) shineBtn.style.display = enabled ? '' : 'none';
 
@@ -129,19 +129,98 @@ SB.updateAIUI = function () {
     SB.panelOpen = false;
   }
 
-  // Selection bar "Ask Shine" button is rebuilt from SB.selectionActions;
+  // Selection bar "Open Shine" button is rebuilt from SB.selectionActions;
   // it reads SB.aiEnabled, so just re-show if there is a selection.
   if (enabled && SB.selection.text) {
     // re-render will pick up the flag
   }
+};
 
-  // PC Control / Browser Control "Ask Shine" inputs
-  const pcAsk = el('pcAsk');
-  const pcAskBtn = el('pcAskBtn');
-  if (pcAsk) pcAsk.style.display = enabled ? '' : 'none';
-  if (pcAskBtn) pcAskBtn.style.display = enabled ? '' : 'none';
-  const bcAsk = el('bcAsk');
-  const bcAskBtn = el('bcAskBtn');
-  if (bcAsk) bcAsk.style.display = enabled ? '' : 'none';
-  if (bcAskBtn) bcAskBtn.style.display = enabled ? '' : 'none';
+// ---- Color customization --------------------------------------------------
+SB.themeColor = SB.settings.themeColor || '#000000';
+SB.accentColor = SB.settings.accentColor || '#ffffff';
+
+SB.applyTheme = function () {
+  const root = document.documentElement;
+  root.style.setProperty('--bg', SB.themeColor || '#000000');
+  root.style.setProperty('--accent', SB.accentColor || '#ffffff');
+  // Also set the title bar color via JS since CSS vars don't affect native title bar
+  if (SB.ipc && SB.ipc.win) {
+    // Title bar color is set via preload/win.setChromeColor
+    SB.ipc.win.setChromeColor(SB.themeColor || '#000000').catch(() => {});
+  }
+};
+
+// ---- Ad blocker -----------------------------------------------------------
+SB.adBlockList = [
+  'doubleclick.net',
+  'googlesyndication.com',
+  'googleadservices.com',
+  'adsystem.com',
+  'adnxs.com',
+  'taboola.com',
+  'outbrain.com',
+  'adroll.com',
+  'facebook.com/tr',
+  'analytics.facebook.com',
+];
+
+SB.isAdBlocked = function (url) {
+  try {
+    const u = new URL(url);
+    return SB.adBlockList.some(d => u.hostname.includes(d) || u.hostname === d);
+  } catch (e) { return false; }
+};
+
+// ---- Download checker -----------------------------------------------------
+SB.downloads = SB.downloads || [];
+SB.downloadProgress = {};
+
+SB.setDownloadProgress = function (id, percent, filename, state) {
+  SB.downloadProgress[id] = { percent, filename, state, time: Date.now() };
+  SB.ipc.overlay.show('download-checker', { mode: 'bottom-center', inset: 80 }, {
+    id, percent, filename, state
+  });
+  clearTimeout(SB.__dlTimer);
+  SB.__dlTimer = setTimeout(() => {
+    SB.ipc.overlay.hide('download-checker');
+  }, 5000);
+};
+
+SB.clearDownloadProgress = function (id) {
+  delete SB.downloadProgress[id];
+  SB.ipc.overlay.hide('download-checker');
+};
+
+// ---- Virus blocker --------------------------------------------------------
+SB.virusBlockList = [
+  'malware.com',
+  'virus.com',
+  'trojan.com',
+];
+
+SB.isBlocked = function (url) {
+  try {
+    const u = new URL(url);
+    return SB.virusBlockList.some(d => u.hostname.includes(d) || u.hostname === d);
+  } catch (e) { return false; }
+};
+
+// ---- Time checker ---------------------------------------------------------
+SB.getTime = function () {
+  const now = new Date();
+  return {
+    now: now.getTime(),
+    iso: now.toISOString(),
+    locale: now.toLocaleString(),
+    hour: now.getHours(),
+    minute: now.getMinutes(),
+    second: now.getSeconds(),
+  };
+};
+
+// ---- Mouse cursor customizer ----------------------------------------------
+SB.cursorStyle = SB.settings.cursorStyle || 'auto';
+SB.applyCursor = function () {
+  document.body.style.cursor = SB.cursorStyle || 'auto';
 };

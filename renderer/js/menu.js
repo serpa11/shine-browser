@@ -1,10 +1,5 @@
 // =====================================================================
 // Shine Browser — main menu, context menu, find bar
-//
-// The two menus are rendered by the overlay view (a transparent child
-// view stacked above the page) because anything drawn by this renderer is
-// underneath the page views. This module still owns the item lists and
-// the action handlers; it just hands the markup to the overlay.
 // =====================================================================
 (function () {
   const ACTIONS = {
@@ -69,7 +64,6 @@
   function openMenu(anchor) {
     const r = anchor.getBoundingClientRect();
     menuOpen = true;
-    // right-aligned under the anchor; the overlay clamps to the window
     SB.ipc.overlay.show('main-menu',
       { mode: 'r', r: r.right, y: r.bottom + 6 },
       { items: MAIN_MENU_ITEMS });
@@ -87,7 +81,6 @@
   SB.closeMenus = closeMenus;
 
   // ---- find bar ----------------------------------------------------------
-  // Lives in the toolbar strip, so it is never covered by the page.
   function openFind() {
     const bar = document.getElementById('findBar');
     if (!bar) return;
@@ -123,7 +116,6 @@
       openMenu(e.currentTarget);
     });
 
-    // find bar (in the chrome strip)
     document.getElementById('findClose').addEventListener('click', closeFind);
     document.getElementById('findNext').addEventListener('click', () => runFind('next'));
     document.getElementById('findPrev').addEventListener('click', () => runFind('prev'));
@@ -132,7 +124,6 @@
       if (e.key === 'Escape') closeFind();
     });
 
-    // global click-away: clicking the chrome closes floating menus
     document.addEventListener('click', (e) => {
       if (menuOpen && !e.target.closest('#btnMenu')) {
         menuOpen = false;
@@ -150,9 +141,7 @@
     const sel = (params.selectionText || '').trim();
 
     if (sel) {
-      if (SB.aiEnabled !== false) {
-        items.push({ act: 'ask-shine', label: 'Ask Shine about this' });
-      }
+      items.push({ act: 'ask-shine', label: 'Ask Shine about this' });
       items.push({ act: 'google-sel', label: 'Search Google for selection', icon: 'search' });
       items.push({ act: 'site-sel', label: 'Search this site for selection', icon: 'globe' });
       items.push({ act: 'copy', label: 'Copy', icon: 'copy' });
@@ -199,8 +188,6 @@
 
     lastCtx = { params, tab, sel };
 
-    // params.x / params.y are relative to the page viewport, which starts
-    // below the browser chrome — add it so the overlay lands in window space.
     const chromeH = SB.chromeH || 122;
     SB.ipc.overlay.show('context-menu',
       { mode: 'xy', x: params.x, y: params.y + chromeH },
@@ -229,7 +216,7 @@
     const sq = (engines[engine] || engines.google) + encodeURIComponent(q);
 
     switch (act) {
-      case 'ask-shine': if (SB.aiEnabled === false) { SB.toast('Shine AI is disabled in Settings.'); break; } SB.shine.open(); SB.ipc.shine.ask(q, 'selection'); break;
+      case 'ask-shine': SB.shine.open(); SB.ipc.shine.ask(q, 'selection'); break;
       case 'google-sel': SB.loadTab(tab, sq); break;
       case 'site-sel': {
         try {
@@ -288,20 +275,14 @@
     }
 
     if (widget === 'omni-suggestions') {
-      SB.omnibox.onOverlayAction(action, data);
+      SB.onOverlaySuggestion(action, data);
       return;
     }
 
     if (widget === 'settings') {
-      // the settings panel runs itself inside the overlay; it only needs
-      // to tell this renderer about a couple of side effects
       if (action === 'toast') SB.toast((data && data.text) || '');
       if (action === 'panel-width') SB.ipc.shine.setWidth(data.ratio);
       if (action === 'panel-open') { if (data.open) SB.shine.show(); else SB.shine.hide(); }
-      if (action === 'ai-toggle') {
-        SB.settings.aiEnabled = !!data.enabled;
-        SB.updateAIUI();
-      }
     }
   };
 

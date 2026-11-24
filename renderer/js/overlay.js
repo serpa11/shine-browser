@@ -1,18 +1,15 @@
 // =====================================================================
 // Shine Browser — floating overlay renderer
-// Hosts everything that has to appear ON TOP of the page: the selection
-// pill, the context menu, the main menu, omnibox suggestions, toasts and
-// the settings window. The main process sizes the overlay view to exactly
-// the widget being shown, so the page underneath stays fully clickable.
+// Hosts: selection pill, context menu, main menu, omnibox suggestions,
+// toasts, download checker, settings panel.
 // =====================================================================
 (function () {
   const API = window.shineOverlay;
-  let seq = 0;                 // last render we measured
-  let current = null;          // widget name currently on screen
+  let seq = 0;
+  let current = null;
 
   const $ = (id) => document.getElementById(id);
 
-  // ---- icons -----------------------------------------------------------
   const ICONS = {
     spark: '',
     search: '<circle cx="11" cy="11" r="6.5"/><line x1="16" y1="16" x2="21" y2="21"/>',
@@ -37,6 +34,9 @@
     info: '<circle cx="12" cy="12" r="8"/><path d="M12 11v5M12 8h.01"/>',
     power: '<path d="M12 4v8"/><path d="M7.5 7.5a6.5 6.5 0 1 0 9 0"/>',
     close: '<path d="M6 6l12 12M18 6 6 18"/>',
+    virus: '<path d="M12 2c5.5 0 10 4.5 10 10s-4.5 10-10 10S2 17.5 2 12 6.5 2 12 2Z"/><path d="M12 8v4M12 16v4M8 12h4M16 12h4"/>',
+    time: '<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 3M12 8V4M12 16v4"/><path d="M12 12h.01"/>',
+    cursor: '<path d="M2 21l2-2h4l4 4-2 2z"/><circle cx="10" cy="10" r="2"/>',
   };
 
   function svg(name) {
@@ -45,7 +45,7 @@
     return '<svg class="svg-icon" viewBox="0 0 24 24" style="flex:none">' + p + '</svg>';
   }
 
-  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>\"']/g, (c) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
   }[c]));
 
@@ -87,7 +87,19 @@
     return esc((data && data.text) || '');
   }
 
-  // ---- settings panel (self-contained) ---------------------------------
+  function renderDownloadChecker(data) {
+    const p = Math.round((data && data.percent) || 0);
+    return `<div class="download-checker">
+      <div class="dl-icon">${svg('down')}</div>
+      <div class="dl-info">
+        <div class="dl-name">${esc(data && data.filename || 'Downloading…')}</div>
+        <div class="dl-prog"><div class="dl-bar" style="width:${p}%"></div></div>
+        <div class="dl-pct">${p}%</div>
+      </div>
+    </div>`;
+  }
+
+  // ---- settings panel --------------------------------------------------
   let settingsWired = false;
 
   async function openSettings() {
@@ -96,23 +108,18 @@
     if (!settingsWired) { wireSettings(); settingsWired = true; }
     try {
       const s = await API.settings.get();
-      $('setSearchEngine').value = s.searchEngine || 'google';
-      $('setStartup').value = s.startup || 'homepage';
-      $('setPanelWidth').value = Math.round((s.panelWidth || 0.42) * 100);
-      $('setPanelOpen').checked = !!s.panelOpen;
-      $('setAIEnabled').checked = s.aiEnabled !== false;
-      $('profileName').textContent = s.profileName || 'Person 1';
-
-      const info = await API.app.info();
-      const st = await API.setup.status();
-      $('aboutBox').innerHTML = `
-        <strong>Shine Browser</strong> ${esc(info.version)}<br>
-        Chromium engine <strong>${esc(info.chrome)}</strong> — updated for 2026<br>
-        Electron ${esc(info.electron)} · Node ${esc(info.node)}<br>
-        ${esc(info.platform)} ${esc(info.arch)}<br>
-        Profile data: ${esc(info.userData)}<br>
-        Shortcuts installed: <strong>${st.desktopShortcut ? 'Desktop ✓' : 'Desktop ✗'}</strong>
-        · <strong>${st.startMenuShortcut ? 'Start menu ✓' : 'Start menu ✗'}</strong>`;
+      $('setThemeColor').value = s.themeColor || '#000000';
+      $('setAccentColor').value = s.accentColor || '#ffffff';
+      $('setCursorStyle').value = s.cursorStyle || 'auto';
+      $('setAiEnabled').checked = s.aiEnabled !== false;
+      // Apply immediately
+      document.documentElement.style.setProperty('--bg', s.themeColor || '#000000');
+      document.documentElement.style.setProperty('--accent', s.accentColor || '#ffffff');
+      document.body.style.cursor = s.cursorStyle || 'auto';
+      $('themeColorPreview').style.background = s.themeColor || '#000000';
+      $('accentColorPreview').style.background = s.accentColor || '#ffffff';
+      $('cursorPreview').style.background = s.cursorStyle === 'auto' ? 'transparent' : s.cursorStyle || '#000';
+      startTimeClock();
     } catch (e) { /* ignore */ }
     report();
   }
@@ -120,45 +127,56 @@
   function closeSettings() {
     $('settingsWindow').classList.remove('on');
     API.dismiss();
+    stopTimeClock();
+  }
+
+  let timeInterval = null;
+  function startTimeClock() {
+    stopTimeClock();
+    updateTime();
+    timeInterval = setInterval(updateTime, 1000);
+  }
+  function stopTimeClock() {
+    if (timeInterval) { clearInterval(timeInterval); timeInterval = null; }
+  }
+  function updateTime() {
+    const d = new Date();
+    const h = String(d.getHours()).padStart(2,'0');
+    const m = String(d.getMinutes()).padStart(2,'0');
+    const s = String(d.getSeconds()).padStart(2,'0');
+    const el = $('timeDisplay');
+    if (el) el.textContent = `${h}:${m}:${s}`;
   }
 
   function wireSettings() {
     $('closeSettings').addEventListener('click', closeSettings);
 
-    $('setSearchEngine').addEventListener('change', async (e) => {
-      await API.settings.set({ searchEngine: e.target.value });
-      API.action({ widget: 'settings', action: 'toast', data: { text: 'Search engine updated' } });
+    const themeInput = $('setThemeColor');
+    const accentInput = $('setAccentColor');
+    const cursorSelect = $('setCursorStyle');
+    const aiCheckbox = $('setAiEnabled');
+
+    themeInput.addEventListener('input', async (e) => {
+      const v = e.target.value;
+      $('themeColorPreview').style.background = v;
+      document.documentElement.style.setProperty('--bg', v);
+      await API.settings.set({ themeColor: v });
     });
-    $('setStartup').addEventListener('change', async (e) => {
-      await API.settings.set({ startup: e.target.value });
+    accentInput.addEventListener('input', async (e) => {
+      const v = e.target.value;
+      $('accentColorPreview').style.background = v;
+      document.documentElement.style.setProperty('--accent', v);
+      await API.settings.set({ accentColor: v });
     });
-    $('setPanelWidth').addEventListener('input', async (e) => {
-      const r = Number(e.target.value) / 100;
-      await API.settings.set({ panelWidth: r });
-      API.action({ widget: 'settings', action: 'panel-width', data: { ratio: r } });
+    cursorSelect.addEventListener('change', async (e) => {
+      const v = e.target.value;
+      document.body.style.cursor = v;
+      $('cursorPreview').style.background = v === 'auto' ? 'transparent' : v;
+      await API.settings.set({ cursorStyle: v });
     });
-    $('setPanelOpen').addEventListener('change', async (e) => {
-      await API.settings.set({ panelOpen: e.target.checked });
-      API.action({ widget: 'settings', action: 'panel-open', data: { open: e.target.checked } });
-    });
-    $('setAIEnabled').addEventListener('change', async (e) => {
+    aiCheckbox.addEventListener('change', async (e) => {
       await API.settings.set({ aiEnabled: e.target.checked });
       API.action({ widget: 'settings', action: 'ai-toggle', data: { enabled: e.target.checked } });
-    });
-    $('changeDl').addEventListener('click', () => {
-      API.action({ widget: 'settings', action: 'toast', data: { text: 'Downloads folder is set in Settings → Downloads.' } });
-    });
-    $('renameProfile').addEventListener('click', async () => {
-      const cur = $('profileName').textContent;
-      const name = window.prompt('Profile name', cur);
-      if (name && name.trim()) {
-        $('profileName').textContent = name.trim();
-        await API.settings.set({ profileName: name.trim() });
-      }
-    });
-    $('reRunSetup').addEventListener('click', () => {
-      closeSettings();
-      API.setup.open();
     });
   }
 
@@ -178,7 +196,7 @@
   }
 
   function hideAll() {
-    ['selectionBar', 'contextMenu', 'mainMenu', 'omniSuggestions', 'toast', 'settingsWindow']
+    ['selectionBar', 'contextMenu', 'mainMenu', 'omniSuggestions', 'toast', 'downloadChecker', 'settingsWindow']
       .forEach((id) => $(id).classList.remove('on'));
   }
 
@@ -199,18 +217,16 @@
       : widget === 'main-menu' ? 'mainMenu'
         : widget === 'omni-suggestions' ? 'omniSuggestions'
           : widget === 'toast' ? 'toast'
-            : 'selectionBar');
+            : widget === 'download-checker' ? 'downloadChecker'
+              : 'selectionBar');
 
     if (widget === 'selection-bar') node.innerHTML = renderSelectionBar(spec.data);
     else if (widget === 'context-menu' || widget === 'main-menu') node.innerHTML = renderMenu(spec.data && spec.data.items);
     else if (widget === 'omni-suggestions') node.innerHTML = renderSuggestions(spec.data);
     else if (widget === 'toast') node.innerHTML = renderToast(spec.data);
+    else if (widget === 'download-checker') node.innerHTML = renderDownloadChecker(spec.data);
 
     node.classList.add('on');
-
-    // Position inside the stage. The main process already moved the whole
-    // view so that the widget's top-left lands on stage (14,14) — we just
-    // pin it there and let the bounds do the clamping.
     node.style.left = '0px';
     node.style.top = '0px';
 
@@ -229,7 +245,6 @@
 
   // ---- interactions ----------------------------------------------------
   document.addEventListener('mousedown', (e) => {
-    // clicks on the transparent padding around a widget dismiss it
     if (!e.target.closest('.ov') || e.target.classList.contains('ov')) {
       API.dismiss();
     }
@@ -252,7 +267,4 @@
   document.addEventListener('keydown', (e) => {
     API.action({ widget: current, action: 'key', data: { key: e.key, ctrl: e.ctrlKey, shift: e.shiftKey } });
   });
-
-  // toast auto-hide is driven by the chrome renderer via a second render;
-  // nothing else to do here.
 })();

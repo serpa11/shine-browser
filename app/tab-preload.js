@@ -50,6 +50,7 @@ if (isNewTabPage()) {
       pickWallpaper: () => ipcRenderer.invoke('nt:pick-wallpaper'),
       clearWallpaper: () => ipcRenderer.invoke('nt:clear-wallpaper'),
       reload: () => { location.reload(); },
+      openShine: () => ipcRenderer.invoke('shine:toggle'),
     });
   } catch (e) {
     try { console.error('[shine] __shineNT expose failed:', String(e && e.message ? e.message : e)); } catch (ee) { /* ignore */ }

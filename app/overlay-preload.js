@@ -42,6 +42,19 @@ contextBridge.exposeInMainWorld('shineOverlay', {
   },
   pc: {
     screenshot: () => invoke('pc:screenshot'),
+    control: (prompt) => invoke('pc:control', { prompt }),
+  },
+  browser: {
+    control: (prompt) => invoke('browser:control', { prompt }),
+  },
+  vision: {
+    captureAndAsk: (prompt) => invoke('vision:capture-and-ask', { prompt }),
+  },
+  virus: {
+    scanUrl: (url) => invoke('virus:scan-url', url),
+  },
+  time: {
+    get: () => invoke('time:get'),
   },
 
   // generic event stream from the main process
