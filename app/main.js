@@ -704,6 +704,114 @@ function setupIpc() {
   }));
 }
 
+function normalizeUrl(input) {
+  const s = String(input || '').trim();
+  if (!s) return 'shine://newtab';
+  if (s === 'shine://newtab') return s;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(s)) return s;
+  if (/^localhost(:\d+)?(\/|$)/i.test(s)) return 'http://' + s;
+  if (/^[\w-]+(\.[\w-]+)+(:\d+)?(\/|$)/.test(s)) return 'https://' + s;
+  return searchUrl(s);
+}
+
+function searchUrl(query) {
+  const s = store.read('settings');
+  return (s.searchEngine || 'google') === 'google' ? 'https://www.google.com/search?q=' + encodeURIComponent(query)
+    : s.searchEngine === 'bing' ? 'https://www.bing.com/search?q=' + encodeURIComponent(query)
+      : s.searchEngine === 'duckduckgo' ? 'https://duckduckgo.com/?q=' + encodeURIComponent(query)
+        : s.searchEngine === 'brave' ? 'https://search.brave.com/search?q=' + encodeURIComponent(query)
+          : s.searchEngine === 'ecosia' ? 'https://www.ecosia.org/search?q=' + encodeURIComponent(query)
+            : s.searchEngine === 'startpage' ? 'https://www.startpage.com/sp/search?query=' + encodeURIComponent(query)
+              : s.searchEngine === 'youtube' ? 'https://www.youtube.com/results?search_query=' + encodeURIComponent(query)
+                : 'https://www.google.com/search?q=' + encodeURIComponent(query);
+}
+
+function wallpaperFile() {
+  const p = store.read('settings').wallpaper;
+  if (!p || !fs.existsSync(p)) return null;
+  return p;
+}
+
+function wallpaperCss() {
+  const p = wallpaperFile();
+  if (!p) return null;
+  try {
+    const ext = path.extname(p).toLowerCase();
+    const mime = ext === '.png' ? 'image/png'
+      : ext === '.webp' ? 'image/webp'
+        : ext === '.gif' ? 'image/gif'
+          : ext === '.bmp' ? 'image/bmp'
+            : 'image/jpeg';
+    const b64 = fs.readFileSync(p).toString('base64');
+    return 'data:' + mime + ';base64,' + b64;
+  } catch (e) { return null; }
+}
+
+function recordHistory(wc, url) {
+  // placeholder - history is recorded elsewhere
+}
+
+function newTabPageHTML(incognito) {
+  const wp = incognito ? null : wallpaperCss();
+  return `<!DOCTYPE html><html><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' data: blob:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: https:; connect-src 'self' https:;">
+<style>
+:root{color-scheme:dark}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:#000;color:#fff;font-family:Inter,-apple-system,"Segoe UI",Roboto,sans-serif;
+ -webkit-font-smoothing:antialiased;display:flex;flex-direction:column;align-items:center;justify-content:center;
+ background-position:center;background-size:cover;background-repeat:no-repeat;position:relative;overflow:hidden}
+body.wp::before{content:"";position:absolute;inset:0;background:rgba(0,0,0,.42)}
+.wrap{position:relative;z-index:1;width:min(600px,88vw);display:flex;flex-direction:column;align-items:center;gap:14px}
+.search{display:flex;align-items:center;gap:12px;padding:15px 18px;
+ border:1px solid rgba(255,255,255,.15);border-radius:15px;background:rgba(10,10,10,.72);
+ backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);transition:border-color .2s ease}
+.search:focus-within{border-color:rgba(255,255,255,.4)}
+.search svg{width:16px;height:16px;flex:none;fill:none;stroke:rgba(255,255,255,.4);
+ stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
+.search input{flex:1;min-width:0;background:transparent;border:none;outline:none;
+ color:#fff;font:inherit;font-size:15px}
+.search input::placeholder{color:rgba(255,255,255,.42)}
+.search .go{border:none;background:transparent;color:rgba(255,255,255,.55);cursor:pointer;
+ font:inherit;font-size:12.5px;padding:7px 12px;border-radius:9px;transition:all .15s ease;white-space:nowrap}
+.search .go:hover{color:#fff;background:rgba(255,255,255,.1)}
+.shine-btn{display:flex;align-items:center;gap:10px;border:1px solid rgba(255,255,255,.12);
+ background:rgba(10,10,10,.6);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+ color:#fff;font:inherit;font-size:13px;font-weight:500;padding:10px 16px;border-radius:10px;
+ cursor:pointer;transition:all .18s ease;margin-top:8px}
+.shine-btn:hover{color:#000;background:#fff;border-color:#fff}
+.shine-btn svg{width:14px;height:14px;fill:#000;stroke:none}
+</style></head><body${wp ? ' class="wp" style="background-image: url(' + wp + ')' : ''}>
+<div class="wrap">
+  <div class="search">
+    <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><line x1="16" y1="16" x2="21" y2="21"/></svg>
+    <input id="q" placeholder="Search or enter website" autofocus autocomplete="off" spellcheck="false" />
+    <button class="go" id="go">Search</button>
+  </div>
+  <button class="shine-btn" id="btnOpenShine">
+    <svg viewBox="0 0 24 24"><path d="M4 12h5M15 12h5M12 4v5M12 15v5"/><circle cx="12" cy="12" r="2.6"/></svg>
+    <span>Open Shine</span>
+  </button>
+</div>
+<script>
+var q = document.getElementById('q');
+function go() {
+  var v = q.value.trim();
+  if (!v) return;
+  if (/^[a-z][a-z0-9+.-]*:\\/\\//i.test(v)) location.href = v;
+  else if (/^[\\w-]+(\\.[\\w-]+)+(:\\d+)?(\\/.*)?$/.test(v) && v.indexOf(' ') < 0) location.href = 'https://' + v;
+  else location.href = 'https://www.google.com/search?q=' + encodeURIComponent(v);
+}
+document.getElementById('go').addEventListener('click', go);
+q.addEventListener('keydown', function (e) { if (e.key === 'Enter') go(); });
+document.getElementById('btnOpenShine').addEventListener('click', function () {
+  window.__shineNT && window.__shineNT.openShine
+    ? window.__shineNT.openShine()
+    : alert('Open Shine not available');
+});
+</script></body></html>`;
+}
 function askShine(text, mode) {
   const s = store.read('settings');
   s.panelOpen = true;
