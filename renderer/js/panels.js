@@ -6,7 +6,7 @@
 // over. Without this the page covers the panel entirely.
 // =====================================================================
 (function () {
-  const PANELS = ['panelHistory', 'panelFavorites', 'panelDownloads'];
+  const PANELS = ['panelHistory', 'panelFavorites', 'panelDownloads', 'panelPC', 'panelBrowser'];
 
   function syncWidth() {
     // the panel that is currently visible; report its width so main can
@@ -29,6 +29,24 @@
     if (id === 'panelHistory') SB.refreshHistory();
     if (id === 'panelFavorites') SB.refreshBookmarks();
     if (id === 'panelDownloads') SB.refreshDownloads();
+    if (id === 'panelPC') {
+      // PC Control: show a toast saying it's on, then close the panel
+      // The actual control happens through Open Shine (split screen)
+      SB.toast('PC Control is ON — talk to Shine in Open Shine to control your PC');
+      setTimeout(() => {
+        SB.toast('PC Control active — describe what you want to Shine');
+        setTimeout(() => closePanels(), 2000);
+      }, 2000);
+    }
+    if (id === 'panelBrowser') {
+      // Browser Control: show a toast saying it's on, then close the panel
+      // The actual control happens through Open Shine (split screen)
+      SB.toast('Browser Control is ON — talk to Shine in Open Shine to control your browser');
+      setTimeout(() => {
+        SB.toast('Browser Control active — describe what you want to Shine');
+        setTimeout(() => closePanels(), 2000);
+      }, 2000);
+    }
     // Report panel width BEFORE layout so tab views shrink to make room
     syncWidth();
     SB.ipc.tab.layout();

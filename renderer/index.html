@@ -83,6 +83,15 @@
       </div>
 
       <div class="toolbar-right">
+        <button class="tool-chip" id="btnPC" title="PC Control — works with Open Shine">
+          <svg class="svg-icon" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+          <span>PC Control</span>
+        </button>
+        <button class="tool-chip" id="btnBrowser" title="Browser Control — works with Open Shine">
+          <svg class="svg-icon" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.5"/><line x1="3" y1="9" x2="21" y2="9"/><circle cx="6.5" cy="6.5" r=".6"/><circle cx="9" cy="6.5" r=".6"/></svg>
+          <span>Browser</span>
+        </button>
+        <span class="tool-sep"></span>
         <button class="icon-btn" id="btnDownloads" title="Downloads">
           <svg class="svg-icon" viewBox="0 0 24 24"><path d="M12 4v11"/><path d="M8 11.5 12 15.5l4-4"/><path d="M5 19h14"/></svg>
         </button>
@@ -92,7 +101,7 @@
         <button class="icon-btn" id="btnFavorites" title="Favorites">
           <svg class="svg-icon" viewBox="0 0 24 24"><path d="M7 4h10a1 1 0 0 1 1 1v15l-6-4-6 4V5a1 1 0 0 1 1-1Z"/></svg>
         </button>
-      </div>
+      </div
     </div>
 
     <!-- ================= CONTENT ================= -->
@@ -154,6 +163,39 @@
         </div>
       </div>
       <div class="panel-body" id="downloadsList"></div>
+    </div>
+
+    <div id="panelPC" class="side-panel wide hidden">
+      <div class="panel-head">
+        <span>PC Control</span>
+        <button class="icon-btn sm panel-close" data-close="panelPC"><svg class="svg-icon" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+      </div>
+      <div class="panel-body" id="pcBody">
+        <div class="panel-label">Ask Shine to control your PC</div>
+        <div class="panel-actions">
+          <input id="pcAsk" placeholder="e.g. open notepad, take a screenshot, launch chrome" />
+          <button class="btn-primary sm" id="pcAskBtn">Ask Shine</button>
+        </div>
+        <div class="panel-actions">
+          <button class="btn-ghost sm" id="pcScreenshot">Screenshot (Vision)</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="panelBrowser" class="side-panel wide hidden">
+      <div class="panel-head">
+        <span>Browser Control</span>
+        <button class="icon-btn sm panel-close" data-close="panelBrowser"><svg class="svg-icon" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+      </div>
+      <div class="panel-body">
+        <div class="panel-label">Ask Shine to drive the browser</div>
+        <div class="panel-actions">
+          <input id="bcAsk" placeholder="e.g. open youtube and search for lofi" />
+          <button class="btn-primary sm" id="bcAskBtn">Ask Shine</button>
+        </div>
+        <div class="panel-label">Open tabs</div>
+        <div id="bcTabs"></div>
+      </div>
     </div>
   </div>
 

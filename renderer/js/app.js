@@ -20,6 +20,8 @@
     document.getElementById('btnDownloads').addEventListener('click', () => SB.panels.toggle('panelDownloads'));
     document.getElementById('btnHistory').addEventListener('click', () => SB.panels.toggle('panelHistory'));
     document.getElementById('btnFavorites').addEventListener('click', () => SB.panels.toggle('panelFavorites'));
+    document.getElementById('btnPC').addEventListener('click', () => SB.panels.toggle('panelPC'));
+    document.getElementById('btnBrowser').addEventListener('click', () => SB.panels.toggle('panelBrowser'));
     document.getElementById('btnShine').addEventListener('click', () => SB.shine.toggle());
     document.getElementById('btnNewTabCenter').addEventListener('click', () => SB.createTab());
   }
